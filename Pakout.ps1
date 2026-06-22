@@ -160,7 +160,7 @@ function Assert-RequiredPackagePaths {
         "Assets\AppIcon.png",
         "Assets\AppIcon.ico",
         "Assets\StoreLogo.png",
-        "Assets\DefaultCardFace.jpeg"
+        "Assets\DefaultCardFace.png"
     )
 
     foreach ($relativePath in $requiredPaths) {

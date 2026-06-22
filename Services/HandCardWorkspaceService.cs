@@ -11,7 +11,8 @@ internal sealed class HandCardWorkspaceService
 {
     public const string HandCardsFolderName = "HandCards";
     public const string HandCardMetaFileName = "handcard.meta.json";
-    public const string CardFaceFileName = "CardFace.jpeg";
+    public const string CardFaceFileName = "CardFace.png";
+    private static readonly string[] LegacyCardFaceFileNames = ["CardFace.jpeg", "CardFace.jpg"];
     public const int HandCardFaceWidth = 357;
     public const int HandCardFaceHeight = 300;
 
@@ -55,7 +56,7 @@ internal sealed class HandCardWorkspaceService
 
         Directory.CreateDirectory(handCardPath);
         var cardFacePath = Path.Combine(handCardPath, CardFaceFileName);
-        CharacterWorkspaceService.SaveCropToJpeg(
+        CharacterWorkspaceService.SaveCropToPng(
             input.CardFaceSourcePath,
             cardFacePath,
             input.CardFaceCrop ?? BuildCenterCrop(input.CardFaceSourcePath),
@@ -134,7 +135,7 @@ internal sealed class HandCardWorkspaceService
 
         var handCard = GetHandCard(projectRootPath, code);
         var cardFacePath = Path.Combine(handCard.Path, CardFaceFileName);
-        CharacterWorkspaceService.SaveCropToJpeg(sourcePath, cardFacePath, crop, HandCardFaceWidth, HandCardFaceHeight);
+        CharacterWorkspaceService.SaveCropToPng(sourcePath, cardFacePath, crop, HandCardFaceWidth, HandCardFaceHeight);
         handCard.Meta.CardFaceFileName = CardFaceFileName;
         return SaveHandCard(projectRootPath, handCard.Meta);
     }
@@ -237,6 +238,23 @@ internal sealed class HandCardWorkspaceService
         var meta = NormalizeMeta(ReadMeta(metaPath), fallbackCode);
         var code = string.IsNullOrWhiteSpace(meta.Code) ? fallbackCode : meta.Code;
         var cardFaceFileName = string.IsNullOrWhiteSpace(meta.CardFaceFileName) ? CardFaceFileName : meta.CardFaceFileName;
+        var metaChanged = false;
+        if (!string.Equals(cardFaceFileName, CardFaceFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            cardFaceFileName = CardFaceFileName;
+            meta.CardFaceFileName = CardFaceFileName;
+            metaChanged = true;
+        }
+
+        if (DeleteLegacyCardFaceFiles(handCardPath))
+        {
+            metaChanged = true;
+        }
+
+        if (metaChanged)
+        {
+            SaveMeta(handCardPath, meta);
+        }
         var cardFacePath = Path.Combine(handCardPath, cardFaceFileName);
         return new HandCardInfo(
             code,
@@ -270,7 +288,7 @@ internal sealed class HandCardWorkspaceService
         meta ??= new HandCardMeta();
         meta.Code = string.IsNullOrWhiteSpace(meta.Code) ? fallbackCode : SanitizeHandCardCode(meta.Code);
         meta.Name = string.IsNullOrWhiteSpace(meta.Name) ? meta.Code : meta.Name.Trim();
-        meta.CardFaceFileName = string.IsNullOrWhiteSpace(meta.CardFaceFileName) ? CardFaceFileName : meta.CardFaceFileName;
+        meta.CardFaceFileName = CardFaceFileName;
         meta.Description = meta.Description.Trim();
         meta.Suit = NormalizeOption(meta.Suit, "Hearts");
         meta.PokerNumber = Math.Clamp(meta.PokerNumber, 1, 13);
@@ -356,5 +374,21 @@ internal sealed class HandCardWorkspaceService
 
         var cropHeight = (int)Math.Round(sourceWidth / targetRatio);
         return new System.Drawing.Rectangle(0, (sourceHeight - cropHeight) / 2, sourceWidth, cropHeight);
+    }
+
+    private static bool DeleteLegacyCardFaceFiles(string ownerPath)
+    {
+        var deleted = false;
+        foreach (var legacyFileName in LegacyCardFaceFileNames)
+        {
+            var legacyPath = Path.Combine(ownerPath, legacyFileName);
+            if (File.Exists(legacyPath))
+            {
+                File.Delete(legacyPath);
+                deleted = true;
+            }
+        }
+
+        return deleted;
     }
 }

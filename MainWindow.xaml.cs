@@ -43,7 +43,7 @@ namespace FantasyTools
             _handCardDetailSaveTimer = DispatcherQueue.CreateTimer();
             _handCardDetailSaveTimer.Interval = TimeSpan.FromMilliseconds(800);
             _handCardDetailSaveTimer.Tick += HandCardDetailSaveTimer_Tick;
-            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.jpeg");
+            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
             _characterWorkspaceService = new CharacterWorkspaceService();
             _handCardWorkspaceService = new HandCardWorkspaceService();
             var settings = new SettingsViewModel(new AppSettingsService(), new LogService(), new ProjectRootMigrationService());
@@ -235,7 +235,7 @@ namespace FantasyTools
 
         private async void CreateCharacterButton_Click(object sender, RoutedEventArgs e)
         {
-            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.jpeg");
+            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
             var editorContent = CharacterDialogContentFactory.CreateCharacterCreateContent(
                 _viewModel.Settings.ProjectRootPath,
                 defaultCardFacePath,
@@ -303,7 +303,7 @@ namespace FantasyTools
 
         private async void CreateHandCardButton_Click(object sender, RoutedEventArgs e)
         {
-            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.jpeg");
+            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
             var editorContent = HandCardDialogContentFactory.CreateHandCardCreateContent(
                 _viewModel.Settings.ProjectRootPath,
                 defaultCardFacePath,

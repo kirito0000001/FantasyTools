@@ -14,8 +14,9 @@ internal sealed class CharacterWorkspaceService
 {
     public const string CharactersFolderName = "Characters";
     public const string CharacterMetaFileName = "character.meta.json";
-    public const string CardFaceFileName = "CardFace.jpeg";
-    public const string BackgroundImageFileName = "BackgroundImage.jpeg";
+    public const string CardFaceFileName = "CardFace.png";
+    public const string BackgroundImageFileName = "BackgroundImage.png";
+    private static readonly string[] LegacyCardFaceFileNames = ["CardFace.jpeg", "CardFace.jpg"];
     public const int CharacterCardFaceWidth = 732;
     public const int CharacterCardFaceHeight = 1028;
     public const int HandCardFaceWidth = 357;
@@ -99,6 +100,23 @@ internal sealed class CharacterWorkspaceService
         var cardFaceFileName = string.IsNullOrWhiteSpace(meta.CardFaceFileName)
             ? CardFaceFileName
             : meta.CardFaceFileName;
+        var metaChanged = false;
+        if (!string.Equals(cardFaceFileName, CardFaceFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            cardFaceFileName = CardFaceFileName;
+            meta.CardFaceFileName = CardFaceFileName;
+            metaChanged = true;
+        }
+
+        if (DeleteLegacyCardFaceFiles(characterPath))
+        {
+            metaChanged = true;
+        }
+
+        if (metaChanged)
+        {
+            SaveMeta(characterPath, meta);
+        }
         var cardFacePath = Path.Combine(characterPath, cardFaceFileName);
         var backgroundImagePath = string.IsNullOrWhiteSpace(meta.BackgroundImageFileName)
             ? string.Empty
@@ -157,17 +175,15 @@ internal sealed class CharacterWorkspaceService
             throw new FileNotFoundException("背景图不存在，请重新选择。", sourcePath);
         }
 
-        var character = GetCharacter(projectRootPath, code);
-        var extension = Path.GetExtension(sourcePath);
-        if (string.IsNullOrWhiteSpace(extension))
+        if (!IsSupportedImage(sourcePath))
         {
-            extension = ".jpeg";
+            throw new InvalidOperationException("背景图只支持 png、jpg、jpeg、webp 来源，导入后会统一保存为 png。");
         }
 
-        var backgroundFileName = $"BackgroundImage{extension.ToLowerInvariant()}";
-        var backgroundPath = Path.Combine(character.Path, backgroundFileName);
-        File.Copy(sourcePath, backgroundPath, true);
-        character.Meta.BackgroundImageFileName = backgroundFileName;
+        var character = GetCharacter(projectRootPath, code);
+        var backgroundPath = Path.Combine(character.Path, BackgroundImageFileName);
+        SaveImageToPng(sourcePath, backgroundPath);
+        character.Meta.BackgroundImageFileName = BackgroundImageFileName;
         return SaveCharacter(projectRootPath, character.Meta);
     }
 
@@ -185,7 +201,7 @@ internal sealed class CharacterWorkspaceService
 
         var character = GetCharacter(projectRootPath, code);
         var cardFacePath = Path.Combine(character.Path, CardFaceFileName);
-        SaveCropToJpeg(sourcePath, cardFacePath, crop, CharacterCardFaceWidth, CharacterCardFaceHeight);
+        SaveCropToPng(sourcePath, cardFacePath, crop, CharacterCardFaceWidth, CharacterCardFaceHeight);
         character.Meta.CardFaceFileName = CardFaceFileName;
         return SaveCharacter(projectRootPath, character.Meta);
     }
@@ -306,7 +322,7 @@ internal sealed class CharacterWorkspaceService
         meta ??= new CharacterMeta();
         meta.Code = string.IsNullOrWhiteSpace(meta.Code) ? fallbackCode : SanitizeCharacterCode(meta.Code);
         meta.Name = string.IsNullOrWhiteSpace(meta.Name) ? meta.Code : meta.Name.Trim();
-        meta.CardFaceFileName = string.IsNullOrWhiteSpace(meta.CardFaceFileName) ? CardFaceFileName : meta.CardFaceFileName;
+        meta.CardFaceFileName = CardFaceFileName;
         meta.Health = Math.Max(1, meta.Health);
         meta.Tags = NormalizeEntries(meta.Tags);
         meta.SkillGroups = NormalizeEntries(meta.SkillGroups);
@@ -410,7 +426,7 @@ internal sealed class CharacterWorkspaceService
         return SupportedImageExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
     }
 
-    public static void SaveCropToJpeg(string sourcePath, string targetPath, Rectangle crop, int targetWidth, int targetHeight)
+    public static void SaveCropToPng(string sourcePath, string targetPath, Rectangle crop, int targetWidth, int targetHeight)
     {
         if (!IsSupportedImage(sourcePath))
         {
@@ -420,7 +436,7 @@ internal sealed class CharacterWorkspaceService
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
         var tempPath = Path.Combine(
             Path.GetDirectoryName(targetPath)!,
-            $".{Path.GetFileNameWithoutExtension(targetPath)}.{Guid.NewGuid():N}.tmp.jpeg");
+            $".{Path.GetFileNameWithoutExtension(targetPath)}.{Guid.NewGuid():N}.tmp.png");
 
         try
         {
@@ -440,7 +456,7 @@ internal sealed class CharacterWorkspaceService
                 graphics.SmoothingMode = SmoothingMode.HighQuality;
                 graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 graphics.DrawImage(source, new Rectangle(0, 0, targetWidth, targetHeight), crop, GraphicsUnit.Pixel);
-                output.Save(tempPath, ImageFormat.Jpeg);
+                output.Save(tempPath, ImageFormat.Png);
             }
 
             File.Copy(tempPath, targetPath, true);
@@ -477,7 +493,48 @@ internal sealed class CharacterWorkspaceService
             throw new InvalidOperationException("裁剪范围无效。");
         }
 
-        SaveCropToJpeg(sourcePath, targetPath, crop, targetWidth, targetHeight);
+        SaveCropToPng(sourcePath, targetPath, crop, targetWidth, targetHeight);
+    }
+
+    private static void SaveImageToPng(string sourcePath, string targetPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        var tempPath = Path.Combine(
+            Path.GetDirectoryName(targetPath)!,
+            $".{Path.GetFileNameWithoutExtension(targetPath)}.{Guid.NewGuid():N}.tmp.png");
+
+        try
+        {
+            using (var source = Image.FromFile(sourcePath))
+            {
+                source.Save(tempPath, ImageFormat.Png);
+            }
+
+            File.Copy(tempPath, targetPath, true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+    }
+
+    private static bool DeleteLegacyCardFaceFiles(string ownerPath)
+    {
+        var deleted = false;
+        foreach (var legacyFileName in LegacyCardFaceFileNames)
+        {
+            var legacyPath = Path.Combine(ownerPath, legacyFileName);
+            if (File.Exists(legacyPath))
+            {
+                File.Delete(legacyPath);
+                deleted = true;
+            }
+        }
+
+        return deleted;
     }
 
     private static Rectangle BuildCenterCrop(int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)

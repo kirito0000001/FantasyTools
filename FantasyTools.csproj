@@ -28,7 +28,7 @@
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\AppIcon.ico" />
     <Content Include="Assets\AppIcon.png" />
-    <Content Include="Assets\DefaultCardFace.jpeg" />
+    <Content Include="Assets\DefaultCardFace.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\Square150x150Logo.scale-200.png" />
     <Content Include="Assets\Square44x44Logo.scale-200.png" />
