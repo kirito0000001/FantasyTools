@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using FantasyTools.Models;
 using FantasyTools.Services;
@@ -27,6 +28,7 @@ namespace FantasyTools
         private readonly WinUiDialogService _dialogService;
         private readonly CharacterWorkspaceService _characterWorkspaceService;
         private readonly HandCardWorkspaceService _handCardWorkspaceService;
+        private readonly UpdateService _updateService;
         private readonly DispatcherQueueTimer _globalProgressElapsedTimer;
         private readonly DispatcherQueueTimer _characterDetailSaveTimer;
         private readonly DispatcherQueueTimer _handCardDetailSaveTimer;
@@ -47,6 +49,7 @@ namespace FantasyTools
             var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
             _characterWorkspaceService = new CharacterWorkspaceService();
             _handCardWorkspaceService = new HandCardWorkspaceService();
+            _updateService = new UpdateService();
             var settings = new SettingsViewModel(new AppSettingsService(), new LogService(), new ProjectRootMigrationService());
             _viewModel = new ApplicationViewModel(
                 settings,
@@ -66,8 +69,10 @@ namespace FantasyTools
             _viewModel.Characters.Load(settings.ProjectRootPath);
             _viewModel.HandCards.Load(settings.ProjectRootPath);
             SyncThemePreferenceComboBox();
+            SyncUpdateChannelComboBox();
             ApplyTheme();
             ShowPage(ToolboxModuleKey.Characters);
+            _ = CheckUpdateOnStartupAsync();
         }
 
         private void ShellNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -205,6 +210,18 @@ namespace FantasyTools
             ApplyTheme();
         }
 
+        private void UpdateChannelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (UpdateChannelComboBox.SelectedIndex < 0)
+            {
+                return;
+            }
+
+            _viewModel.Settings.UpdateChannel = UpdateChannelComboBox.SelectedIndex == 1
+                ? UpdateChannel.Beta
+                : UpdateChannel.Stable;
+        }
+
         private void RefreshShellButton_Click(object sender, RoutedEventArgs e)
         {
             _viewModel.Settings.EnsureCurrentProjectRoot();
@@ -230,6 +247,7 @@ namespace FantasyTools
 
             _viewModel.Settings.RestoreRecommendedDefaults();
             SyncThemePreferenceComboBox();
+            SyncUpdateChannelComboBox();
             ApplyTheme();
             ShowFloatingTip(InfoBarSeverity.Success, "设置已恢复", "已恢复整体设置推荐值。");
         }
@@ -1014,6 +1032,159 @@ namespace FantasyTools
             _viewModel.Settings.ClearLog();
         }
 
+        private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            await CheckForUpdatesAsync(showNoUpdateTip: true, allowUpdatePrompt: true);
+        }
+
+        private async void OpenReleasePageButton_Click(object sender, RoutedEventArgs e)
+        {
+            await _updateService.OpenReleasePageAsync(_viewModel.Settings.UpdateReleasePageUrl);
+        }
+
+        private async Task CheckUpdateOnStartupAsync()
+        {
+            if (!_viewModel.Settings.UpdateAutoCheckEnabled || !_viewModel.Settings.UpdateCheckOnStartup)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            await CheckForUpdatesAsync(showNoUpdateTip: true, allowUpdatePrompt: true, isStartupCheck: true);
+        }
+
+        private async Task CheckForUpdatesAsync(
+            bool showNoUpdateTip,
+            bool allowUpdatePrompt,
+            bool isStartupCheck = false)
+        {
+            try
+            {
+                if (!isStartupCheck)
+                {
+                    ShowGlobalProgress("检查热更新", "正在请求 GitHub Release...");
+                    UpdateGlobalProgress("正在请求 GitHub Release...", 8, _viewModel.Settings.UpdateChannelText, true);
+                }
+
+                var result = await _updateService.CheckAsync(
+                    _viewModel.Settings.UpdateReleaseApiUrl,
+                    _viewModel.Settings.UpdateChannel,
+                    isStartupCheck ? CancellationToken.None : GetGlobalProgressCancellationToken());
+                _viewModel.Settings.SetUpdateStatus(result.Message);
+                if (!isStartupCheck)
+                {
+                    CompleteGlobalProgress("检查完成", result.Message);
+                    await HideGlobalProgressAfterDelayAsync();
+                }
+
+                if (!result.HasUpdate || result.Manifest is null || result.Asset is null)
+                {
+                    if (showNoUpdateTip)
+                    {
+                        ShowFloatingTip(InfoBarSeverity.Informational, "热更新检查完成", result.Message);
+                    }
+
+                    return;
+                }
+
+                if (allowUpdatePrompt)
+                {
+                    await PromptAndInstallUpdateAsync(result);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                CompleteGlobalProgress("检查已取消", "没有下载或替换任何文件。");
+                await HideGlobalProgressAfterDelayAsync();
+            }
+            catch (Exception ex)
+            {
+                _viewModel.Settings.SetUpdateStatus($"热更新检查失败：{ex.Message}");
+                if (!isStartupCheck)
+                {
+                    CompleteGlobalProgress("热更新检查失败", ex.Message);
+                    await HideGlobalProgressAfterDelayAsync();
+                }
+
+                ShowFloatingTip(
+                    InfoBarSeverity.Warning,
+                    "热更新检查失败",
+                    "无法连接或读取 GitHub Release，可稍后重试。",
+                    $"热更新检查失败：{ex}");
+            }
+        }
+
+        private async Task PromptAndInstallUpdateAsync(UpdateCheckResult result)
+        {
+            var manifest = result.Manifest!;
+            var asset = result.Asset!;
+            var body = new StackPanel
+            {
+                Width = 460,
+                Spacing = 8
+            };
+            body.Children.Add(new TextBlock { Text = $"当前版本：{result.CurrentVersion}" });
+            body.Children.Add(new TextBlock { Text = $"新版本：{result.LatestVersion}" });
+            body.Children.Add(new TextBlock { Text = $"更新通道：{manifest.Channel}" });
+            body.Children.Add(new TextBlock { Text = $"更新包：{asset.FileName}" });
+            body.Children.Add(new TextBlock
+            {
+                Text = "下载和校验会在工具箱内完成；之后会打开 PowerShell 替换程序文件，完成后按 Enter 打开新版本。",
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var dialogResult = await _dialogService.ShowContentAsync(new ContentDialogRequest(
+                "发现新版本",
+                body,
+                PrimaryButtonText: "下载并更新",
+                CloseButtonText: "继续使用旧版"));
+            if (dialogResult != DialogResultKind.Primary)
+            {
+                return;
+            }
+
+            await DownloadAndLaunchUpdaterAsync(manifest, asset);
+        }
+
+        private async Task DownloadAndLaunchUpdaterAsync(UpdateManifest manifest, UpdateAssetManifest asset)
+        {
+            ShowGlobalProgress("下载热更新", asset.FileName);
+            try
+            {
+                var progress = new Progress<ProgressUpdate>(update =>
+                {
+                    UpdateGlobalProgress(update.Message, update.Percent, update.Detail, update.IsIndeterminate);
+                });
+                var download = await _updateService.DownloadAndVerifyAsync(
+                    manifest,
+                    asset,
+                    progress,
+                    GetGlobalProgressCancellationToken());
+                CompleteGlobalProgress("更新包已校验", "正在打开 PowerShell updater。");
+                _viewModel.Settings.SetUpdateStatus($"更新包已下载：{manifest.Version}");
+                _updateService.LaunchUpdater(download.PackagePath, manifest, asset);
+                await Task.Delay(600);
+                Application.Current.Exit();
+            }
+            catch (OperationCanceledException)
+            {
+                CompleteGlobalProgress("下载已取消", "没有替换任何程序文件。");
+                ShowFloatingTip(InfoBarSeverity.Warning, "下载已取消", "没有替换任何程序文件。");
+                await HideGlobalProgressAfterDelayAsync();
+            }
+            catch (Exception ex)
+            {
+                CompleteGlobalProgress("热更新失败", ex.Message);
+                _viewModel.Settings.SetUpdateStatus($"热更新失败：{ex.Message}");
+                ShowFloatingTip(
+                    InfoBarSeverity.Error,
+                    "热更新失败",
+                    ex.Message,
+                    $"热更新失败：{ex}");
+                await HideGlobalProgressAfterDelayAsync();
+            }
+        }
+
         private void ShowPage(ToolboxModuleKey key)
         {
             FlushCharacterDetailSave();
@@ -1162,6 +1333,11 @@ namespace FantasyTools
                 ThemePreference.System => 1,
                 _ => 0
             };
+        }
+
+        private void SyncUpdateChannelComboBox()
+        {
+            UpdateChannelComboBox.SelectedIndex = _viewModel.Settings.UpdateChannel == UpdateChannel.Beta ? 1 : 0;
         }
 
         private void ApplyWindowIcon()

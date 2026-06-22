@@ -160,7 +160,8 @@ function Assert-RequiredPackagePaths {
         "Assets\AppIcon.png",
         "Assets\AppIcon.ico",
         "Assets\StoreLogo.png",
-        "Assets\DefaultCardFace.png"
+        "Assets\DefaultCardFace.png",
+        "Tools\Update-App.ps1"
     )
 
     foreach ($relativePath in $requiredPaths) {
@@ -168,6 +169,82 @@ function Assert-RequiredPackagePaths {
         if (!(Test-Path -LiteralPath $fullPath)) {
             throw "Required package file was not found: $fullPath"
         }
+    }
+}
+
+function New-UpdatePackageManifest {
+    param(
+        [string]$ProgramDir,
+        [string]$Version,
+        [string]$Runtime,
+        [string]$EntryExe
+    )
+
+    $manifest = [ordered]@{
+        schemaVersion    = 1
+        toolboxStableKey = "FantasyTools"
+        version          = $Version
+        runtime          = $Runtime
+        entryExe         = $EntryExe
+        createdAt        = (Get-Date).ToString("o")
+    }
+    $manifestPath = Join-Path $ProgramDir "update-package.json"
+    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+}
+
+function New-ReleaseAssets {
+    param(
+        [string]$PackageRoot,
+        [string]$ProgramDir,
+        [string]$OutputRoot,
+        [string]$AppDisplayName,
+        [string]$Version,
+        [string]$Runtime
+    )
+
+    $releaseAssetRoot = Join-Path $OutputRoot "ReleaseAssets"
+    New-Item -ItemType Directory -Force -Path $releaseAssetRoot | Out-Null
+
+    $zipName = "FantasyTools-v$Version-$Runtime.zip"
+    $zipPath = Join-Path $releaseAssetRoot $zipName
+    $shaPath = Join-Path $releaseAssetRoot "FantasyTools-v$Version-$Runtime.sha256.txt"
+    $manifestPath = Join-Path $releaseAssetRoot "toolbox-update.json"
+
+    if (Test-Path -LiteralPath $zipPath) {
+        Remove-Item -LiteralPath $zipPath -Force
+    }
+
+    Compress-Archive -LiteralPath $ProgramDir -DestinationPath $zipPath -Force
+    $sha = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$sha  $zipName" | Set-Content -LiteralPath $shaPath -Encoding ASCII
+    $zipSize = (Get-Item -LiteralPath $zipPath).Length
+
+    $manifest = [ordered]@{
+        schemaVersion           = 1
+        toolboxStableKey        = "FantasyTools"
+        displayName             = $AppDisplayName
+        version                 = $Version
+        channel                 = "stable"
+        publishedAt             = (Get-Date).ToString("o")
+        minSupportedVersion     = "1.0.0"
+        releaseNotesUrl         = "https://github.com/kirito0000001/FantasyTools/releases/tag/v$Version"
+        requiresManualMigration = $false
+        requiresRestart         = $true
+        assets                  = @(
+            [ordered]@{
+                runtime   = $Runtime
+                fileName  = $zipName
+                sha256    = $sha
+                sizeBytes = $zipSize
+            }
+        )
+    }
+    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
+    return [pscustomobject]@{
+        ZipPath      = $zipPath
+        ShaPath      = $shaPath
+        ManifestPath = $manifestPath
     }
 }
 
@@ -249,12 +326,22 @@ Copy-WinUiCompiledResources `
     -AppExeBaseName $assemblyName
 
 $appExe = Join-Path $programDir $appExeName
+New-UpdatePackageManifest -ProgramDir $programDir -Version $appVersion -Runtime $Runtime -EntryExe $appExeName
 Assert-RequiredPackagePaths -ProgramDir $programDir -AssemblyName $assemblyName
 New-AppShortcut `
     -ShortcutPath $shortcutPath `
     -TargetPath $appExe `
     -WorkingDirectory $programDir `
     -Description $appDisplayName
+
+Write-Host "==> Building release assets"
+$releaseAssets = New-ReleaseAssets `
+    -PackageRoot $packageRoot `
+    -ProgramDir $programDir `
+    -OutputRoot $OutputRoot `
+    -AppDisplayName $appDisplayName `
+    -Version $appVersion `
+    -Runtime $Runtime
 
 if (!$KeepWorkFolder) {
     Remove-DirectoryIfExists -Path $workRoot
@@ -266,6 +353,9 @@ Write-Host "Version:        $appVersion"
 Write-Host "Runtime:        $Runtime"
 Write-Host "Program folder: $appDisplayName"
 Write-Host "Shortcut:       $appDisplayName.lnk"
+Write-Host "Release zip:    $($releaseAssets.ZipPath)"
+Write-Host "Release sha256: $($releaseAssets.ShaPath)"
+Write-Host "Release json:   $($releaseAssets.ManifestPath)"
 if ($KeepWorkFolder) {
     Write-Host "Work folder:    $workRoot"
 }

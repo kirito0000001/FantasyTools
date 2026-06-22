@@ -1,3 +1,5 @@
+using System;
+
 namespace FantasyTools.Models;
 
 internal enum ThemePreference
@@ -5,6 +7,12 @@ internal enum ThemePreference
     Light,
     System,
     Dark
+}
+
+internal enum UpdateChannel
+{
+    Stable,
+    Beta
 }
 
 internal sealed class AppSettings
@@ -38,4 +46,18 @@ internal sealed class AppSettings
     public int MediumAssetAutoBackupLimit { get; set; } = 5;
 
     public int UnrealSyncBackupLimit { get; set; } = 2;
+
+    public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
+
+    public bool UpdateAutoCheckEnabled { get; set; } = true;
+
+    public bool UpdateCheckOnStartup { get; set; } = true;
+
+    public DateTimeOffset? UpdateLastCheckAt { get; set; }
+
+    public string? UpdateLastStatus { get; set; }
+
+    public string UpdateReleaseApiUrl { get; set; } = "https://api.github.com/repos/kirito0000001/FantasyTools/releases";
+
+    public string UpdateReleasePageUrl { get; set; } = "https://github.com/kirito0000001/FantasyTools/releases";
 }

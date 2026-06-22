@@ -27,6 +27,9 @@ internal sealed class SettingsViewModel : ObservableObject
     private bool _logUserOperations = true;
     private bool _logWarnings = true;
     private bool _logErrors = true;
+    private UpdateChannel _updateChannel = UpdateChannel.Stable;
+    private bool _updateAutoCheckEnabled = true;
+    private bool _updateCheckOnStartup = true;
     private bool _isLoadingSettings;
 
     public SettingsViewModel(
@@ -116,6 +119,38 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public bool IsLogOptionsEnabled => LogEnabled;
 
+    public UpdateChannel UpdateChannel
+    {
+        get => _updateChannel;
+        set => SetSettingProperty(ref _updateChannel, value, nameof(UpdateChannel), () => _settings.UpdateChannel = value, nameof(UpdateChannelText));
+    }
+
+    public string UpdateChannelText => UpdateChannel == UpdateChannel.Beta ? "测试版 / prerelease" : "稳定版 / Release";
+
+    public bool UpdateAutoCheckEnabled
+    {
+        get => _updateAutoCheckEnabled;
+        set => SetSettingProperty(ref _updateAutoCheckEnabled, value, nameof(UpdateAutoCheckEnabled), () => _settings.UpdateAutoCheckEnabled = value);
+    }
+
+    public bool UpdateCheckOnStartup
+    {
+        get => _updateCheckOnStartup;
+        set => SetSettingProperty(ref _updateCheckOnStartup, value, nameof(UpdateCheckOnStartup), () => _settings.UpdateCheckOnStartup = value);
+    }
+
+    public string UpdateReleaseApiUrl => _settings.UpdateReleaseApiUrl;
+
+    public string UpdateReleasePageUrl => _settings.UpdateReleasePageUrl;
+
+    public string UpdateLastCheckText => _settings.UpdateLastCheckAt is null
+        ? "最近检查：从未检查"
+        : $"最近检查：{_settings.UpdateLastCheckAt.Value.LocalDateTime:yyyy-MM-dd HH:mm}";
+
+    public string UpdateLastStatus => string.IsNullOrWhiteSpace(_settings.UpdateLastStatus)
+        ? "更新状态：尚未检查。"
+        : _settings.UpdateLastStatus;
+
     public string UnrealEnginePath
     {
         get => _settings.UnrealEnginePath ?? string.Empty;
@@ -184,6 +219,9 @@ internal sealed class SettingsViewModel : ObservableObject
             LogUserOperations = _settings.LogUserOperations;
             LogWarnings = _settings.LogWarnings;
             LogErrors = _settings.LogErrors;
+            UpdateChannel = _settings.UpdateChannel;
+            UpdateAutoCheckEnabled = _settings.UpdateAutoCheckEnabled;
+            UpdateCheckOnStartup = _settings.UpdateCheckOnStartup;
         }
         finally
         {
@@ -194,6 +232,8 @@ internal sealed class SettingsViewModel : ObservableObject
         AppendLog(LogVerbosity.Log, "程序启动，已检查整体项目目录。");
         OnPropertyChanged(nameof(UnrealEnginePath));
         OnPropertyChanged(nameof(UnrealProjectPath));
+        OnPropertyChanged(nameof(UpdateLastCheckText));
+        OnPropertyChanged(nameof(UpdateLastStatus));
     }
 
     public string BuildProjectRootPathFromParent(string parentPath)
@@ -264,6 +304,9 @@ internal sealed class SettingsViewModel : ObservableObject
         LogUserOperations = true;
         LogWarnings = true;
         LogErrors = true;
+        UpdateChannel = UpdateChannel.Stable;
+        UpdateAutoCheckEnabled = true;
+        UpdateCheckOnStartup = true;
         AppendLog(LogVerbosity.Display, "已恢复整体设置推荐值。");
     }
 
@@ -282,6 +325,15 @@ internal sealed class SettingsViewModel : ObservableObject
         ProjectRootStatusSeverity = severity;
         ProjectRootStatusTitle = title;
         ProjectRootStatusMessage = message;
+    }
+
+    public void SetUpdateStatus(string message)
+    {
+        _settings.UpdateLastCheckAt = DateTimeOffset.Now;
+        _settings.UpdateLastStatus = message;
+        Save();
+        OnPropertyChanged(nameof(UpdateLastCheckText));
+        OnPropertyChanged(nameof(UpdateLastStatus));
     }
 
     private bool SetSettingProperty<T>(ref T field, T value, string propertyName, System.Action updateSettings, string? dependentPropertyName = null)
