@@ -14,7 +14,7 @@
 - 整体设置：支持整体项目位置迁移、夜间模式、辅助显示、日志相关开关。
 - 备份和回滚基础：删除、重命名、导出等重要操作会优先创建可恢复备份。
 - F1 / F2：提供快捷键说明和整体项目信息辅助入口。
-- 打包脚本：提供 `Pakout.ps1` / `Pakout.bat`，可生成给别人使用的普通 exe 文件夹包。
+- 脚本入口：`Scripts\工具箱脚本菜单.ps1` 提供打包、发布正式版和发布 Beta 版的菜单选择。
 
 ## 技术栈
 
@@ -35,8 +35,11 @@ FantasyTools/
   Styles/          工具箱通用样式
   ViewModels/      页面和对象的状态与命令
   Views/           弹窗内容工厂等 UI 片段
-  Pakout.ps1       正式打包脚本
-  Pakout.bat       双击打包入口
+  Scripts/
+    工具箱脚本菜单.ps1  交互式脚本入口
+    打包工具箱.ps1      打包核心脚本
+    发布新版本.ps1      发布核心脚本
+    热更新覆盖.ps1      程序热更新覆盖脚本
 ```
 
 ## 开发环境
@@ -72,16 +75,10 @@ D:\幻杀工具箱项目
 
 ## 打包发布
 
-推荐使用项目根目录的打包脚本：
+推荐使用 `Scripts` 文件夹内的菜单脚本：
 
 ```powershell
-.\Pakout.ps1
-```
-
-或双击：
-
-```text
-Pakout.bat
+.\Scripts\工具箱脚本菜单.ps1
 ```
 
 默认输出：
@@ -101,9 +98,13 @@ D:\DabaoV\幻杀工具箱V1.0.0\
 常用参数：
 
 ```powershell
-.\Pakout.ps1 -Configuration Release -Runtime win-x64
-.\Pakout.ps1 -Clean
-.\Pakout.ps1 -OutputRoot "D:\DabaoV"
+.\Scripts\打包工具箱.ps1 -Configuration Release -Runtime win-x64
+.\Scripts\打包工具箱.ps1 -Clean
+.\Scripts\打包工具箱.ps1 -OutputRoot "D:\DabaoV"
+.\Scripts\发布新版本.ps1 -Version 1.0.1 -Runtime win-x64
+.\Scripts\发布新版本.ps1 -Version 1.0.1-beta.1 -Runtime win-x64 -Prerelease
+.\Scripts\工具箱脚本菜单.ps1 -Action ReleaseStable -Version 1.0.1
+.\Scripts\工具箱脚本菜单.ps1 -Action ReleaseBeta -Version 1.0.1-beta.1
 ```
 
 ## 交付包说明
@@ -123,7 +124,8 @@ D:\DabaoV\幻杀工具箱V1.0.0.zip
 
 - 源码文件：`.cs`、`.xaml`、`.csproj`、`.sln`
 - 默认资源：`Assets`
-- 打包脚本：`Pakout.ps1`、`Pakout.bat`
+- 脚本入口：`Scripts\工具箱脚本菜单.ps1`
+- 脚本核心：`Scripts\打包工具箱.ps1`、`Scripts\发布新版本.ps1`、`Scripts\热更新覆盖.ps1`
 - 文档：`README.md`
 
 不要提交：

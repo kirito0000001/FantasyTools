@@ -11,7 +11,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$repoRoot = $PSScriptRoot
+$scriptsRoot = if (![string]::IsNullOrWhiteSpace($env:FANTASYTOOLS_SCRIPT_DIR)) {
+    $env:FANTASYTOOLS_SCRIPT_DIR.TrimEnd('\')
+}
+else {
+    $PSScriptRoot
+}
+$repoRoot = Split-Path -Parent $scriptsRoot
 $projectPath = Join-Path $repoRoot "FantasyTools.csproj"
 [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -21,9 +27,9 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
         Select-Object -First 1).Trim()
 }
 
-& (Join-Path $repoRoot "Pakout.ps1") -Configuration Release -Runtime $Runtime -OutputRoot $OutputRoot -Version $Version
+& (Join-Path $scriptsRoot "打包工具箱.ps1") -Configuration Release -Runtime $Runtime -OutputRoot $OutputRoot -Version $Version
 if ($LASTEXITCODE -ne 0) {
-    throw "Pakout.ps1 failed with exit code $LASTEXITCODE"
+    throw "打包工具箱.ps1 failed with exit code $LASTEXITCODE"
 }
 
 $assetRoot = Join-Path $OutputRoot "ReleaseAssets"

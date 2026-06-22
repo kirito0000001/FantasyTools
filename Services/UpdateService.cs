@@ -175,7 +175,7 @@ internal sealed class UpdateService
 
     public void LaunchUpdater(string packagePath, UpdateManifest manifest, UpdateAssetManifest asset)
     {
-        var updaterPath = Path.Combine(AppContext.BaseDirectory, "Tools", "Update-App.ps1");
+        var updaterPath = Path.Combine(AppContext.BaseDirectory, "Scripts", "热更新覆盖.ps1");
         if (!File.Exists(updaterPath))
         {
             throw new FileNotFoundException("热更新脚本不存在。", updaterPath);

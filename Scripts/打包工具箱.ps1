@@ -161,7 +161,7 @@ function Assert-RequiredPackagePaths {
         "Assets\AppIcon.ico",
         "Assets\StoreLogo.png",
         "Assets\DefaultCardFace.png",
-        "Tools\Update-App.ps1"
+        "Scripts\热更新覆盖.ps1"
     )
 
     foreach ($relativePath in $requiredPaths) {
@@ -248,7 +248,13 @@ function New-ReleaseAssets {
     }
 }
 
-$repoRoot = $PSScriptRoot
+$scriptsRoot = if (![string]::IsNullOrWhiteSpace($env:FANTASYTOOLS_SCRIPT_DIR)) {
+    $env:FANTASYTOOLS_SCRIPT_DIR.TrimEnd('\')
+}
+else {
+    $PSScriptRoot
+}
+$repoRoot = Split-Path -Parent $scriptsRoot
 $projectPath = Join-Path $repoRoot "FantasyTools.csproj"
 if (!(Test-Path -LiteralPath $projectPath)) {
     throw "Project file not found: $projectPath"
