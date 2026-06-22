@@ -389,6 +389,28 @@ namespace FantasyTools
             PlayPageEntrance(BasicDeckSettingsPage);
         }
 
+        private void BackToHandCardsListButton_Click(object sender, RoutedEventArgs e)
+        {
+            FlushHandCardDetailSave();
+            _returnToBasicDeckAfterHandCardDetail = false;
+            _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+            BasicDeckSettingsPage.Visibility = Visibility.Collapsed;
+            HandCardDetailPage.Visibility = Visibility.Collapsed;
+            HandCardsPage.Visibility = Visibility.Visible;
+            PlayPageEntrance(HandCardsPage);
+        }
+
+        private void BackToBasicDeckSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            FlushHandCardDetailSave();
+            _returnToBasicDeckAfterHandCardDetail = false;
+            _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+            HandCardsPage.Visibility = Visibility.Collapsed;
+            HandCardDetailPage.Visibility = Visibility.Collapsed;
+            BasicDeckSettingsPage.Visibility = Visibility.Visible;
+            PlayPageEntrance(BasicDeckSettingsPage);
+        }
+
         private async void BasicDeckSlotButton_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not SuitDeckSlotViewModel slot)
@@ -418,6 +440,7 @@ namespace FantasyTools
                 var handCard = _handCardWorkspaceService.GetHandCard(_viewModel.Settings.ProjectRootPath, code);
                 _returnToBasicDeckAfterHandCardDetail = returnToBasicDeck;
                 _viewModel.HandCardDetail.Load(handCard);
+                _viewModel.HandCardDetail.ShowBasicDeckBreadcrumb = returnToBasicDeck;
                 _ = LoadHandCardFacePreviewAsync();
                 HandCardsPage.Visibility = Visibility.Collapsed;
                 BasicDeckSettingsPage.Visibility = Visibility.Collapsed;

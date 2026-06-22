@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using FantasyTools.Models;
@@ -145,13 +146,27 @@ internal sealed class SuitDeckSlotViewModel
 
     public string DisplayTitle => FormatSuitNumber(Suit, Number);
 
+    public string NumberLabel => FormatNumber(Number);
+
     public string DisplaySubtitle => IsFilled
         ? _cards.First().Name
         : "未填入";
 
+    public string BindingTitle => IsFilled
+        ? _cards.First().Name
+        : "尚未设置手牌";
+
+    public string BindingSubtitle => IsFilled
+        ? $"英文代号：{CardCode}"
+        : $"新建时预填：{DisplayTitle}";
+
+    public string SlotActionText => IsFilled
+        ? "打开详情"
+        : "填入此槽位";
+
     public string StatusText => IsFilled
-        ? (HasMultipleCards ? $"{CardCount} 张" : "已填入")
-        : "缺少";
+        ? (HasMultipleCards ? $"已设置 {CardCount} 张" : "已设置")
+        : "未设置";
 
     public string AutomationName => IsFilled
         ? $"{DisplayTitle} 已填入 {DisplaySubtitle}"
@@ -176,7 +191,7 @@ internal sealed class SuitDeckSlotViewModel
             11 => "J",
             12 => "Q",
             13 => "K",
-            _ => number.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            _ => number.ToString(CultureInfo.InvariantCulture)
         };
     }
 }

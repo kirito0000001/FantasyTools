@@ -13,6 +13,7 @@
             </ResourceDictionary.MergedDictionaries>
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
             <converters:FileImageSourceConverter x:Key="FileImageSourceConverter" />
+            <converters:SuitDeckSlotBrushConverter x:Key="SuitDeckSlotBrushConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

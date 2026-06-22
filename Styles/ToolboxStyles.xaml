@@ -9,12 +9,28 @@
             <SolidColorBrush x:Key="GlobalProgressHostBorderBrush" Color="#33000000" />
             <SolidColorBrush x:Key="GlobalProgressPrimaryTextBrush" Color="#202020" />
             <SolidColorBrush x:Key="GlobalProgressSecondaryTextBrush" Color="#99000000" />
+            <SolidColorBrush x:Key="SuitDeckFilledBackgroundBrush" Color="#EAF7F1" />
+            <SolidColorBrush x:Key="SuitDeckFilledBorderBrush" Color="#2E9D73" />
+            <SolidColorBrush x:Key="SuitDeckFilledAccentBrush" Color="#168765" />
+            <SolidColorBrush x:Key="SuitDeckFilledTextBrush" Color="#064D39" />
+            <SolidColorBrush x:Key="SuitDeckMissingBackgroundBrush" Color="#FFF7E8" />
+            <SolidColorBrush x:Key="SuitDeckMissingBorderBrush" Color="#C87900" />
+            <SolidColorBrush x:Key="SuitDeckMissingAccentBrush" Color="#C87900" />
+            <SolidColorBrush x:Key="SuitDeckMissingTextBrush" Color="#6B3D00" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="GlobalProgressHostBackgroundBrush" Color="#F0000000" />
             <SolidColorBrush x:Key="GlobalProgressHostBorderBrush" Color="#4DFFFFFF" />
             <SolidColorBrush x:Key="GlobalProgressPrimaryTextBrush" Color="#F2FFFFFF" />
             <SolidColorBrush x:Key="GlobalProgressSecondaryTextBrush" Color="#B3FFFFFF" />
+            <SolidColorBrush x:Key="SuitDeckFilledBackgroundBrush" Color="#132F27" />
+            <SolidColorBrush x:Key="SuitDeckFilledBorderBrush" Color="#4FC89C" />
+            <SolidColorBrush x:Key="SuitDeckFilledAccentBrush" Color="#20906F" />
+            <SolidColorBrush x:Key="SuitDeckFilledTextBrush" Color="#B7F2DC" />
+            <SolidColorBrush x:Key="SuitDeckMissingBackgroundBrush" Color="#362817" />
+            <SolidColorBrush x:Key="SuitDeckMissingBorderBrush" Color="#E1A33A" />
+            <SolidColorBrush x:Key="SuitDeckMissingAccentBrush" Color="#B97716" />
+            <SolidColorBrush x:Key="SuitDeckMissingTextBrush" Color="#FFD89A" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

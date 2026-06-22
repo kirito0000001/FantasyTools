@@ -50,6 +50,7 @@ internal sealed class HandCardDetailViewModel : ObservableObject
     private string _noticeTitle = "手牌资料";
     private string _noticeMessage = "从手牌卡进入后，在这里维护手牌基础数据。";
     private bool _isNoticeOpen = true;
+    private bool _showBasicDeckBreadcrumb;
     private bool _isLoading;
     private bool _isDirty;
 
@@ -98,6 +99,10 @@ internal sealed class HandCardDetailViewModel : ObservableObject
     public string BreadcrumbText => string.IsNullOrWhiteSpace(Code)
         ? "手牌"
         : $"手牌 {Title} / {Code}";
+
+    public string DetailBreadcrumbText => string.IsNullOrWhiteSpace(Code)
+        ? "手牌详情"
+        : $"{FormatSuitNumber(Suit, PokerNumber)} / {Title}";
 
     public string CardFacePath
     {
@@ -234,6 +239,12 @@ internal sealed class HandCardDetailViewModel : ObservableObject
         private set => SetProperty(ref _isNoticeOpen, value);
     }
 
+    public bool ShowBasicDeckBreadcrumb
+    {
+        get => _showBasicDeckBreadcrumb;
+        set => SetProperty(ref _showBasicDeckBreadcrumb, value);
+    }
+
     public void Load(HandCardInfo handCard)
     {
         _isLoading = true;
@@ -345,7 +356,23 @@ internal sealed class HandCardDetailViewModel : ObservableObject
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(BreadcrumbText));
+        OnPropertyChanged(nameof(DetailBreadcrumbText));
         OnPropertyChanged(nameof(HasHandCard));
+    }
+
+    private static string FormatSuitNumber(string suit, double number)
+    {
+        var suitName = SuitOptions.FirstOrDefault(option => option.Value == suit)?.DisplayName ?? suit;
+        var normalizedNumber = Math.Clamp((int)Math.Round(number), 1, 13);
+        var label = normalizedNumber switch
+        {
+            1 => "A",
+            11 => "J",
+            12 => "Q",
+            13 => "K",
+            _ => normalizedNumber.ToString(CultureInfo.InvariantCulture)
+        };
+        return $"{suitName} {label}";
     }
 
     private static string BuildLastUpdatedText(DateTimeOffset updatedAt)
