@@ -1049,7 +1049,7 @@ namespace FantasyTools
             var path = _viewModel.CharacterDetail.CardFacePath;
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
-                CharacterCardFacePreviewImage.Source = null;
+                CharacterCardFacePreviewImage.Source = await LoadDefaultCardFacePreviewAsync();
                 return;
             }
 
@@ -1059,12 +1059,12 @@ namespace FantasyTools
             }
             catch (Exception ex)
             {
-                CharacterCardFacePreviewImage.Source = null;
+                CharacterCardFacePreviewImage.Source = await LoadDefaultCardFacePreviewAsync();
                 ShowFloatingTip(
-                    InfoBarSeverity.Error,
+                    InfoBarSeverity.Warning,
                     "卡面预览读取失败",
-                    ex.Message,
-                    $"卡面预览读取失败：{path}；{ex}");
+                    "该卡面文件无法解码，已临时显示默认卡面。请重新设置卡面图片。",
+                    $"卡面预览读取失败：{BuildSafeDisplayPath(path)}；{ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -1073,7 +1073,7 @@ namespace FantasyTools
             var path = _viewModel.HandCardDetail.CardFacePath;
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
-                HandCardFacePreviewImage.Source = null;
+                HandCardFacePreviewImage.Source = await LoadDefaultCardFacePreviewAsync();
                 return;
             }
 
@@ -1083,12 +1083,39 @@ namespace FantasyTools
             }
             catch (Exception ex)
             {
-                HandCardFacePreviewImage.Source = null;
+                HandCardFacePreviewImage.Source = await LoadDefaultCardFacePreviewAsync();
                 ShowFloatingTip(
-                    InfoBarSeverity.Error,
+                    InfoBarSeverity.Warning,
                     "手牌卡面预览读取失败",
-                    ex.Message,
-                    $"手牌卡面预览读取失败：{path}；{ex}");
+                    "该手牌卡面文件无法解码，已临时显示默认卡面。请重新设置卡面图片。",
+                    $"手牌卡面预览读取失败：{BuildSafeDisplayPath(path)}；{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static string BuildSafeDisplayPath(string path)
+        {
+            var fileName = Path.GetFileName(path);
+            var parentName = Path.GetFileName(Path.GetDirectoryName(path) ?? string.Empty);
+            return string.IsNullOrWhiteSpace(parentName)
+                ? fileName
+                : Path.Combine(parentName, fileName);
+        }
+
+        private async Task<BitmapImage?> LoadDefaultCardFacePreviewAsync()
+        {
+            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
+            if (!File.Exists(defaultCardFacePath))
+            {
+                return null;
+            }
+
+            try
+            {
+                return await LoadBitmapImageFromFileAsync(defaultCardFacePath);
+            }
+            catch
+            {
+                return null;
             }
         }
 

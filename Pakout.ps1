@@ -223,7 +223,9 @@ dotnet publish $workProjectPath `
     -p:WindowsAppSDKSelfContained=true `
     -p:PublishSingleFile=false `
     -p:PublishTrimmed=false `
-    -p:PublishReadyToRun=true
+    -p:PublishReadyToRun=true `
+    -p:DebugType=None `
+    -p:DebugSymbols=false
 
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE"
@@ -238,6 +240,7 @@ if (!(Test-Path -LiteralPath $publishedExe)) {
 Write-Host "==> Building release layout"
 New-Item -ItemType Directory -Force -Path $programDir | Out-Null
 Copy-Item -Path (Join-Path $publishDir "*") -Destination $programDir -Recurse -Force
+Get-ChildItem -LiteralPath $programDir -Recurse -Include *.pdb,*.xml | Remove-Item -Force
 Copy-WinUiCompiledResources `
     -BuildOutputDir $workBuildOutputDir `
     -DestinationDir $programDir `
