@@ -357,7 +357,7 @@ $targetFramework = Get-ProjectProperty -ProjectXml $projectXml -Name "TargetFram
 $appDisplayName = Get-ProjectProperty -ProjectXml $projectXml -Name "Product"
 $assemblyName = Get-ProjectProperty -ProjectXml $projectXml -Name "AssemblyName"
 $appVersion = Get-AppVersion -ExplicitVersion $Version -ProjectXml $projectXml
-$packageBaseName = "$appDisplayName" + "V" + $appVersion
+$packageBaseName = $appDisplayName
 
 $workRoot = Join-Path $env:TEMP "FantasyTools-Pakout"
 $workSourceRoot = Join-Path $workRoot "source"
@@ -365,7 +365,7 @@ $publishDir = Join-Path $workRoot "publish"
 $workProjectPath = Join-Path $workSourceRoot "FantasyTools.csproj"
 $workBuildOutputDir = Join-Path $workSourceRoot (Join-Path "bin" (Join-Path $platform (Join-Path $Configuration (Join-Path $targetFramework $Runtime))))
 $packageRoot = Join-Path $OutputRoot $packageBaseName
-$programDir = Join-Path $packageRoot $appDisplayName
+$programDir = $packageRoot
 $shortcutPath = Join-Path $packageRoot "$appDisplayName.lnk"
 
 if ($Clean) {
@@ -448,7 +448,6 @@ Write-Host ""
 Write-Host "Package folder: $packageRoot"
 Write-Host "Version:        $appVersion"
 Write-Host "Runtime:        $Runtime"
-Write-Host "Program folder: $appDisplayName"
 Write-Host "Shortcut:       $appDisplayName.lnk"
 Write-Host "Release zip:    $($releaseAssets.ZipPath)"
 Write-Host "Release sha256: $($releaseAssets.ShaPath)"

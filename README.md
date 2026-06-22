@@ -84,15 +84,15 @@ D:\幻杀工具箱项目
 默认输出：
 
 ```text
-D:\DabaoV\幻杀工具箱V1.0.0\
+D:\DabaoV\幻杀工具箱\
   幻杀工具箱.lnk
-  幻杀工具箱\
-    幻杀工具箱.exe
-    幻杀工具箱.pri
-    App.xbf
-    MainWindow.xbf
-    Assets\
-    ...
+  幻杀工具箱.exe
+  幻杀工具箱.pri
+  App.xbf
+  MainWindow.xbf
+  Assets\
+  Scripts\
+  ...
 ```
 
 常用参数：
@@ -117,8 +117,8 @@ D:\DabaoV\幻杀工具箱V1.0.0\
 当前阶段已验证的交付包：
 
 ```text
-D:\DabaoV\幻杀工具箱V1.0.0
-D:\DabaoV\幻杀工具箱V1.0.0.zip
+D:\DabaoV\幻杀工具箱
+D:\DabaoV\ReleaseAssets\FantasyTools-v1.0.1-win-x64.zip
 ```
 
 交付给别人时优先发送压缩包。解压后建议从外层的 `幻杀工具箱.lnk` 启动。
