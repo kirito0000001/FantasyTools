@@ -240,7 +240,9 @@ if (!(Test-Path -LiteralPath $publishedExe)) {
 Write-Host "==> Building release layout"
 New-Item -ItemType Directory -Force -Path $programDir | Out-Null
 Copy-Item -Path (Join-Path $publishDir "*") -Destination $programDir -Recurse -Force
-Get-ChildItem -LiteralPath $programDir -Recurse -Include *.pdb,*.xml | Remove-Item -Force
+Get-ChildItem -LiteralPath $programDir -Recurse -File |
+    Where-Object { $_.Extension -in @(".pdb", ".xml") } |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 Copy-WinUiCompiledResources `
     -BuildOutputDir $workBuildOutputDir `
     -DestinationDir $programDir `
