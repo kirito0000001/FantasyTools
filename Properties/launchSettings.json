@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FantasyTools (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "FantasyTools (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
