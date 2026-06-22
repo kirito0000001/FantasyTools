@@ -1,6 +1,7 @@
 using System;
 using FantasyTools.Models;
 using FantasyTools.Services;
+using FantasyTools.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -14,13 +15,17 @@ internal static class HandCardDialogContentFactory
         string projectRootPath,
         string defaultCardFacePath,
         HandCardWorkspaceService handCardWorkspaceService,
-        Func<Action<string, DrawingRectangle?>, RoutedEventHandler> createCardFacePickHandler)
+        Func<Action<string, DrawingRectangle?>, RoutedEventHandler> createCardFacePickHandler,
+        string defaultSuit = "Hearts",
+        int defaultPokerNumber = 1)
     {
         return new HandCardCreateDialogContent(
             projectRootPath,
             defaultCardFacePath,
             handCardWorkspaceService,
-            createCardFacePickHandler);
+            createCardFacePickHandler,
+            defaultSuit,
+            defaultPokerNumber);
     }
 }
 
@@ -29,27 +34,39 @@ internal sealed class HandCardCreateDialogContent
     private readonly string _projectRootPath;
     private readonly HandCardWorkspaceService _handCardWorkspaceService;
     private readonly TextBox _codeBox;
+    private readonly TextBlock _slotPreviewText;
     private readonly Image _cardFacePreview;
     private readonly InfoBar _validationInfoBar;
     private readonly TextBlock _folderPreviewText;
     private string _cardFaceSourcePath;
     private DrawingRectangle? _cardFaceCrop;
+    private readonly string _defaultSuit;
+    private readonly int _defaultPokerNumber;
 
     public HandCardCreateDialogContent(
         string projectRootPath,
         string defaultCardFacePath,
         HandCardWorkspaceService handCardWorkspaceService,
-        Func<Action<string, DrawingRectangle?>, RoutedEventHandler> createCardFacePickHandler)
+        Func<Action<string, DrawingRectangle?>, RoutedEventHandler> createCardFacePickHandler,
+        string defaultSuit,
+        int defaultPokerNumber)
     {
         _projectRootPath = projectRootPath;
         _handCardWorkspaceService = handCardWorkspaceService;
         _cardFaceSourcePath = defaultCardFacePath;
+        _defaultSuit = string.IsNullOrWhiteSpace(defaultSuit) ? "Hearts" : defaultSuit;
+        _defaultPokerNumber = Math.Clamp(defaultPokerNumber, 1, 13);
 
         _codeBox = new TextBox
         {
             Header = "手牌英文代号",
             PlaceholderText = "例如：Sha / Shan / QingGangSword",
             Width = 340
+        };
+
+        _slotPreviewText = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap
         };
 
         _cardFacePreview = new Image
@@ -77,6 +94,7 @@ internal sealed class HandCardCreateDialogContent
             Width = 380
         };
         Content.Children.Add(CreateCardFaceRow(createCardFacePickHandler(UpdateCardFacePath)));
+        Content.Children.Add(_slotPreviewText);
         Content.Children.Add(_codeBox);
         Content.Children.Add(_folderPreviewText);
         Content.Children.Add(_validationInfoBar);
@@ -93,7 +111,10 @@ internal sealed class HandCardCreateDialogContent
         return new HandCardCreateInput(
             HandCardWorkspaceService.SanitizeHandCardCode(_codeBox.Text),
             _cardFaceSourcePath,
-            _cardFaceCrop);
+            _cardFaceCrop,
+            SuitDeckSlotViewModel.BuildDefaultCardName(_defaultSuit, _defaultPokerNumber),
+            _defaultSuit,
+            _defaultPokerNumber);
     }
 
     public void FocusFirstInput()
@@ -189,6 +210,7 @@ internal sealed class HandCardCreateDialogContent
 
     private void UpdatePreview()
     {
+        _slotPreviewText.Text = $"基础卡堆槽位：{SuitDeckSlotViewModel.FormatSuitNumber(_defaultSuit, _defaultPokerNumber)}";
         _folderPreviewText.Text = $"创建后文件夹预览：{_handCardWorkspaceService.BuildHandCardFolderPreview(_projectRootPath, _codeBox.Text)}";
     }
 }

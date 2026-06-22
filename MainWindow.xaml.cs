@@ -30,6 +30,7 @@ namespace FantasyTools
         private readonly DispatcherQueueTimer _globalProgressElapsedTimer;
         private readonly DispatcherQueueTimer _characterDetailSaveTimer;
         private readonly DispatcherQueueTimer _handCardDetailSaveTimer;
+        private bool _returnToBasicDeckAfterHandCardDetail;
 
         public MainWindow()
         {
@@ -303,12 +304,19 @@ namespace FantasyTools
 
         private async void CreateHandCardButton_Click(object sender, RoutedEventArgs e)
         {
+            _ = await CreateHandCardAsync();
+        }
+
+        private async Task<HandCardInfo?> CreateHandCardAsync(string defaultSuit = "Hearts", int defaultPokerNumber = 1)
+        {
             var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
             var editorContent = HandCardDialogContentFactory.CreateHandCardCreateContent(
                 _viewModel.Settings.ProjectRootPath,
                 defaultCardFacePath,
                 _handCardWorkspaceService,
-                CreateHandCardFacePickHandler);
+                CreateHandCardFacePickHandler,
+                defaultSuit,
+                defaultPokerNumber);
 
             var result = await _dialogService.ShowContentAsync(new ContentDialogRequest(
                 "新建手牌",
@@ -329,7 +337,7 @@ namespace FantasyTools
                 }));
             if (result != DialogResultKind.Primary)
             {
-                return;
+                return null;
             }
 
             try
@@ -342,6 +350,7 @@ namespace FantasyTools
                     InfoBarSeverity.Success,
                     "手牌已创建",
                     $"{handCard.Code} 已创建。");
+                return handCard;
             }
             catch (Exception ex)
             {
@@ -350,6 +359,7 @@ namespace FantasyTools
                     "创建手牌失败",
                     ex.Message,
                     $"创建手牌失败：{ex}");
+                return null;
             }
         }
 
@@ -369,15 +379,48 @@ namespace FantasyTools
             OpenHandCardDetail(card.Code);
         }
 
-        private void OpenHandCardDetail(string code)
+        private void OpenBasicDeckSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            FlushHandCardDetailSave();
+            _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+            HandCardsPage.Visibility = Visibility.Collapsed;
+            HandCardDetailPage.Visibility = Visibility.Collapsed;
+            BasicDeckSettingsPage.Visibility = Visibility.Visible;
+            PlayPageEntrance(BasicDeckSettingsPage);
+        }
+
+        private async void BasicDeckSlotButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not SuitDeckSlotViewModel slot)
+            {
+                return;
+            }
+
+            if (slot.IsFilled)
+            {
+                OpenHandCardDetail(slot.CardCode, true);
+                return;
+            }
+
+            var handCard = await CreateHandCardAsync(slot.Suit, slot.Number);
+            if (handCard is not null)
+            {
+                _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+                OpenBasicDeckSettingsButton_Click(sender, e);
+            }
+        }
+
+        private void OpenHandCardDetail(string code, bool returnToBasicDeck = false)
         {
             try
             {
                 FlushHandCardDetailSave();
                 var handCard = _handCardWorkspaceService.GetHandCard(_viewModel.Settings.ProjectRootPath, code);
+                _returnToBasicDeckAfterHandCardDetail = returnToBasicDeck;
                 _viewModel.HandCardDetail.Load(handCard);
                 _ = LoadHandCardFacePreviewAsync();
                 HandCardsPage.Visibility = Visibility.Collapsed;
+                BasicDeckSettingsPage.Visibility = Visibility.Collapsed;
                 HandCardDetailPage.Visibility = Visibility.Visible;
                 PlayPageEntrance(HandCardDetailPage);
             }
@@ -395,8 +438,18 @@ namespace FantasyTools
         {
             FlushHandCardDetailSave();
             HandCardDetailPage.Visibility = Visibility.Collapsed;
-            HandCardsPage.Visibility = Visibility.Visible;
             _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+            if (_returnToBasicDeckAfterHandCardDetail)
+            {
+                _returnToBasicDeckAfterHandCardDetail = false;
+                HandCardsPage.Visibility = Visibility.Collapsed;
+                BasicDeckSettingsPage.Visibility = Visibility.Visible;
+                PlayPageEntrance(BasicDeckSettingsPage);
+                return;
+            }
+
+            BasicDeckSettingsPage.Visibility = Visibility.Collapsed;
+            HandCardsPage.Visibility = Visibility.Visible;
             PlayPageEntrance(HandCardsPage);
         }
 
@@ -943,7 +996,9 @@ namespace FantasyTools
             FlushCharacterDetailSave();
             FlushHandCardDetailSave();
             CharacterDetailPage.Visibility = Visibility.Collapsed;
+            BasicDeckSettingsPage.Visibility = Visibility.Collapsed;
             HandCardDetailPage.Visibility = Visibility.Collapsed;
+            _returnToBasicDeckAfterHandCardDetail = false;
             if (key != ToolboxModuleKey.Characters)
             {
                 CharacterCardFacePreviewImage.Source = null;

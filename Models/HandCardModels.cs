@@ -8,7 +8,10 @@ namespace FantasyTools.Models;
 internal sealed record HandCardCreateInput(
     string Code,
     string CardFaceSourcePath,
-    Rectangle? CardFaceCrop = null);
+    Rectangle? CardFaceCrop = null,
+    string Name = "",
+    string Suit = "Hearts",
+    int PokerNumber = 1);
 
 internal sealed class HandCardMeta
 {

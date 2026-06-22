@@ -66,8 +66,11 @@ internal sealed class HandCardWorkspaceService
         var meta = new HandCardMeta
         {
             Code = code,
-            Name = code,
+            Name = string.IsNullOrWhiteSpace(input.Name) ? code : input.Name.Trim(),
             CardFaceFileName = CardFaceFileName,
+            Suit = NormalizeOption(input.Suit, "Hearts"),
+            PokerNumber = Math.Clamp(input.PokerNumber, 1, 13),
+            CardType = "Base",
             CreatedAt = DateTimeOffset.Now,
             UpdatedAt = DateTimeOffset.Now
         };

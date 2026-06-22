@@ -633,6 +633,7 @@
                                     <ColumnDefinition Width="320" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox PlaceholderText="搜索手牌 / 类型 / 代号" />
@@ -641,6 +642,16 @@
                                 </Button>
                                 <Button Grid.Column="2" Style="{StaticResource IconToolButtonStyle}" ToolTipService.ToolTip="排序">
                                     <SymbolIcon Symbol="Sort" />
+                                </Button>
+                                <Button
+                                    Grid.Column="3"
+                                    Click="OpenBasicDeckSettingsButton_Click"
+                                    Style="{StaticResource PrimaryToolButtonStyle}"
+                                    ToolTipService.ToolTip="打开基础卡堆设置">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <SymbolIcon Symbol="AllApps" />
+                                        <TextBlock Text="基础卡堆设置" />
+                                    </StackPanel>
                                 </Button>
                             </Grid>
                         </Border>
@@ -727,6 +738,119 @@
                         </ItemsControl>
                     </Grid>
                 </ScrollViewer>
+
+                <Grid
+                    x:Name="BasicDeckSettingsPage"
+                    Visibility="Collapsed"
+                    RowSpacing="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid MaxWidth="1480" HorizontalAlignment="Stretch" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button
+                            Click="BackToHandCardsButton_Click"
+                            Style="{StaticResource IconToolButtonStyle}"
+                            ToolTipService.ToolTip="返回手牌列表">
+                            <SymbolIcon Symbol="Back" />
+                        </Button>
+
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="基础卡堆设置" />
+                            <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding HandCards.SuitDeckSummary, Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <Grid MaxWidth="1480" HorizontalAlignment="Stretch" RowSpacing="16">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <InfoBar
+                                IsClosable="False"
+                                IsOpen="True"
+                                Message="固定显示红桃、方片、梅花、黑桃的 A 到 K 槽位。每个槽位至少需要一张手牌；空缺槽位可以直接填入。"
+                                Severity="Informational"
+                                Title="基础卡堆完整度" />
+
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding HandCards.SuitDeckSlots, Mode=OneWay}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsWrapGrid
+                                            HorizontalAlignment="Stretch"
+                                            ItemHeight="112"
+                                            ItemWidth="330"
+                                            MaximumRowsOrColumns="4"
+                                            Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border
+                                            Width="312"
+                                            Height="96"
+                                            Padding="12"
+                                            Style="{StaticResource PanelBorderStyle}">
+                                            <Grid ColumnSpacing="10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="70" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock
+                                                        FontSize="18"
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding DisplayTitle, Mode=OneWay}"
+                                                        TextAlignment="Center" />
+                                                    <Border HorizontalAlignment="Center" Style="{StaticResource StatusPillBorderStyle}">
+                                                        <TextBlock FontSize="11" Text="{Binding StatusText, Mode=OneWay}" />
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                                    <TextBlock
+                                                        FontSize="14"
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding DisplaySubtitle, Mode=OneWay}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock
+                                                        Style="{StaticResource SubtleTextStyle}"
+                                                        Text="{Binding CardCode, Mode=OneWay}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+
+                                                <Grid Grid.Column="2">
+                                                    <Button
+                                                        Click="BasicDeckSlotButton_Click"
+                                                        CommandParameter="{Binding}"
+                                                        Content="打开"
+                                                        Style="{StaticResource PrimaryToolButtonStyle}"
+                                                        Visibility="{Binding IsFilled, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                                                    <Button
+                                                        Click="BasicDeckSlotButton_Click"
+                                                        CommandParameter="{Binding}"
+                                                        Content="填入"
+                                                        Style="{StaticResource PrimaryToolButtonStyle}"
+                                                        Visibility="{Binding IsFilled, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}" />
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
 
                 <Grid
                     x:Name="HandCardDetailPage"
