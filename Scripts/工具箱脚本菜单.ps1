@@ -128,7 +128,7 @@ switch ($choice) {
 $Runtime = Read-Default -Prompt "Runtime" -DefaultValue $Runtime
 $OutputRoot = Read-Default -Prompt "输出目录" -DefaultValue $OutputRoot
 if ($Action -eq "Pack") {
-    $Version = Read-Host "版本号（留空则读取 csproj）"
+    $Version = Read-Host "新版本号（留空则按当前 csproj 版本打包；填写时必须大于当前版本并会写入 csproj）"
 }
 else {
     $Version = Read-Default -Prompt "版本号" -DefaultValue $(if ([string]::IsNullOrWhiteSpace($Version)) { Get-DefaultVersion } else { $Version })

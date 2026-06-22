@@ -20,6 +20,7 @@ else {
 $repoRoot = Split-Path -Parent $scriptsRoot
 $projectPath = Join-Path $repoRoot "FantasyTools.csproj"
 [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
+$explicitVersion = ![string]::IsNullOrWhiteSpace($Version)
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = ($projectXml.Project.PropertyGroup |
         ForEach-Object { $_.Version } |
@@ -27,7 +28,16 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
         Select-Object -First 1).Trim()
 }
 
-& (Join-Path $scriptsRoot "打包工具箱.ps1") -Configuration Release -Runtime $Runtime -OutputRoot $OutputRoot -Version $Version
+$packArguments = @{
+    Configuration = "Release"
+    Runtime       = $Runtime
+    OutputRoot    = $OutputRoot
+}
+if ($explicitVersion) {
+    $packArguments.Version = $Version
+}
+
+& (Join-Path $scriptsRoot "打包工具箱.ps1") @packArguments
 if ($LASTEXITCODE -ne 0) {
     throw "打包工具箱.ps1 failed with exit code $LASTEXITCODE"
 }
@@ -55,7 +65,17 @@ if ($null -eq $gh) {
 
 $tag = "v$Version"
 $title = "FantasyTools $Version"
-$notes = "FantasyTools $Version"
+$notesPath = Join-Path $scriptsRoot "新版本介绍.txt"
+if (!(Test-Path -LiteralPath $notesPath)) {
+    "FantasyTools $Version" | Set-Content -LiteralPath $notesPath -Encoding UTF8
+}
+
+$notes = Get-Content -LiteralPath $notesPath -Raw -Encoding UTF8
+if ([string]::IsNullOrWhiteSpace($notes)) {
+    $notes = "FantasyTools $Version"
+    Set-Content -LiteralPath $notesPath -Value $notes -Encoding UTF8
+}
+
 $args = @(
     "release",
     "create",
@@ -65,8 +85,8 @@ $args = @(
     $manifestPath,
     "--title",
     $title,
-    "--notes",
-    $notes
+    "--notes-file",
+    $notesPath
 )
 if ($Prerelease) {
     $args += "--prerelease"

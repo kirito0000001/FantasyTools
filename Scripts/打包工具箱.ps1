@@ -58,6 +58,93 @@ function Get-AppVersion {
     return Get-ProjectProperty -ProjectXml $ProjectXml -Name "Version"
 }
 
+function ConvertTo-VersionParts {
+    param([string]$VersionText)
+
+    $match = [regex]::Match($VersionText.Trim(), '^v?(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:\.(?<build>\d+))?(?:-(?<label>[0-9A-Za-z.-]+))?$')
+    if (!$match.Success) {
+        throw "版本号格式无效：$VersionText。请使用 1.0.1 或 1.0.1-beta.1。"
+    }
+
+    $label = $match.Groups["label"].Value
+    $labelNumber = 0
+    if (![string]::IsNullOrWhiteSpace($label)) {
+        $labelNumberMatch = [regex]::Match($label, '(\d+)$')
+        if ($labelNumberMatch.Success) {
+            $labelNumber = [int]$labelNumberMatch.Value
+        }
+    }
+
+    return [pscustomobject]@{
+        Text        = $VersionText.Trim().TrimStart('v', 'V')
+        Major       = [int]$match.Groups["major"].Value
+        Minor       = [int]$match.Groups["minor"].Value
+        Patch       = [int]$match.Groups["patch"].Value
+        Build       = $(if ($match.Groups["build"].Success) { [int]$match.Groups["build"].Value } else { 0 })
+        Label       = $label
+        LabelNumber = $labelNumber
+        IsPrerelease = ![string]::IsNullOrWhiteSpace($label)
+    }
+}
+
+function Compare-ToolboxVersion {
+    param(
+        [string]$Left,
+        [string]$Right
+    )
+
+    $leftParts = ConvertTo-VersionParts -VersionText $Left
+    $rightParts = ConvertTo-VersionParts -VersionText $Right
+    foreach ($name in @("Major", "Minor", "Patch", "Build")) {
+        if ($leftParts.$name -gt $rightParts.$name) { return 1 }
+        if ($leftParts.$name -lt $rightParts.$name) { return -1 }
+    }
+
+    if ($leftParts.IsPrerelease -and !$rightParts.IsPrerelease) { return -1 }
+    if (!$leftParts.IsPrerelease -and $rightParts.IsPrerelease) { return 1 }
+    if ($leftParts.IsPrerelease -and $rightParts.IsPrerelease) {
+        $labelCompare = [string]::Compare($leftParts.Label, $rightParts.Label, [System.StringComparison]::OrdinalIgnoreCase)
+        if ($labelCompare -ne 0) { return $labelCompare }
+        if ($leftParts.LabelNumber -gt $rightParts.LabelNumber) { return 1 }
+        if ($leftParts.LabelNumber -lt $rightParts.LabelNumber) { return -1 }
+    }
+
+    return 0
+}
+
+function Get-AssemblyCompatibleVersion {
+    param([string]$VersionText)
+
+    $parts = ConvertTo-VersionParts -VersionText $VersionText
+    return "{0}.{1}.{2}.{3}" -f $parts.Major, $parts.Minor, $parts.Patch, $parts.Build
+}
+
+function Set-ProjectVersion {
+    param(
+        [string]$ProjectPath,
+        [xml]$ProjectXml,
+        [string]$NewVersion
+    )
+
+    $currentVersion = Get-ProjectProperty -ProjectXml $ProjectXml -Name "Version"
+    if ((Compare-ToolboxVersion -Left $NewVersion -Right $currentVersion) -le 0) {
+        throw "新版本号必须大于当前版本。当前版本：$currentVersion；输入版本：$NewVersion"
+    }
+
+    $assemblyVersion = Get-AssemblyCompatibleVersion -VersionText $NewVersion
+    $content = Get-Content -LiteralPath $ProjectPath -Raw -Encoding UTF8
+    $content = [regex]::Replace($content, '<Version>[^<]+</Version>', "<Version>$NewVersion</Version>", 1)
+    $content = [regex]::Replace($content, '<AssemblyVersion>[^<]+</AssemblyVersion>', "<AssemblyVersion>$assemblyVersion</AssemblyVersion>", 1)
+    $content = [regex]::Replace($content, '<FileVersion>[^<]+</FileVersion>', "<FileVersion>$assemblyVersion</FileVersion>", 1)
+    $content = [regex]::Replace($content, '<InformationalVersion>[^<]+</InformationalVersion>', "<InformationalVersion>$NewVersion</InformationalVersion>", 1)
+    [System.IO.File]::WriteAllText(
+        $ProjectPath,
+        $content,
+        [System.Text.UTF8Encoding]::new($false))
+
+    Write-Host "==> Version updated: $currentVersion -> $NewVersion"
+}
+
 function Remove-DirectoryIfExists {
     param([string]$Path)
 
@@ -261,6 +348,10 @@ if (!(Test-Path -LiteralPath $projectPath)) {
 }
 
 [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
+if (![string]::IsNullOrWhiteSpace($Version)) {
+    Set-ProjectVersion -ProjectPath $projectPath -ProjectXml $projectXml -NewVersion $Version.Trim()
+    [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
+}
 $platform = Get-PlatformFromRuntime -RuntimeIdentifier $Runtime
 $targetFramework = Get-ProjectProperty -ProjectXml $projectXml -Name "TargetFramework"
 $appDisplayName = Get-ProjectProperty -ProjectXml $projectXml -Name "Product"

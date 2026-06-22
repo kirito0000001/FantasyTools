@@ -101,11 +101,16 @@ D:\DabaoV\幻杀工具箱V1.0.0\
 .\Scripts\打包工具箱.ps1 -Configuration Release -Runtime win-x64
 .\Scripts\打包工具箱.ps1 -Clean
 .\Scripts\打包工具箱.ps1 -OutputRoot "D:\DabaoV"
+.\Scripts\打包工具箱.ps1 -Version 1.0.1
 .\Scripts\发布新版本.ps1 -Version 1.0.1 -Runtime win-x64
 .\Scripts\发布新版本.ps1 -Version 1.0.1-beta.1 -Runtime win-x64 -Prerelease
 .\Scripts\工具箱脚本菜单.ps1 -Action ReleaseStable -Version 1.0.1
 .\Scripts\工具箱脚本菜单.ps1 -Action ReleaseBeta -Version 1.0.1-beta.1
 ```
+
+当 `打包工具箱.ps1` 或发布脚本传入 `-Version` 时，新版本号必须大于 `FantasyTools.csproj` 当前版本；脚本会同步更新 `Version`、`AssemblyVersion`、`FileVersion` 和 `InformationalVersion`。不传 `-Version` 时仅按当前版本重新打包。
+
+发布 GitHub Release 前可编辑 `Scripts\新版本介绍.txt`，发布脚本会把该文件内容作为 Release 介绍。
 
 ## 交付包说明
 
