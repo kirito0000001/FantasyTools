@@ -30,6 +30,7 @@ internal sealed class SettingsViewModel : ObservableObject
     private UpdateChannel _updateChannel = UpdateChannel.Stable;
     private bool _updateAutoCheckEnabled = true;
     private bool _updateCheckOnStartup = true;
+    private double _updateConnectionTimeoutSeconds = 120;
     private bool _isLoadingSettings;
 
     public SettingsViewModel(
@@ -139,6 +140,25 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetSettingProperty(ref _updateCheckOnStartup, value, nameof(UpdateCheckOnStartup), () => _settings.UpdateCheckOnStartup = value);
     }
 
+    public double UpdateConnectionTimeoutSeconds
+    {
+        get => _updateConnectionTimeoutSeconds;
+        set
+        {
+            var normalized = Math.Clamp(double.IsNaN(value) ? 120 : Math.Round(value), 10, 600);
+            SetSettingProperty(
+                ref _updateConnectionTimeoutSeconds,
+                normalized,
+                nameof(UpdateConnectionTimeoutSeconds),
+                () => _settings.UpdateConnectionTimeoutSeconds = (int)normalized,
+                nameof(UpdateConnectionTimeoutText));
+        }
+    }
+
+    public int UpdateConnectionTimeoutSecondsValue => (int)Math.Clamp(Math.Round(UpdateConnectionTimeoutSeconds), 10, 600);
+
+    public string UpdateConnectionTimeoutText => $"最长连接时间：{UpdateConnectionTimeoutSecondsValue} 秒";
+
     public string UpdateReleaseApiUrl => _settings.UpdateReleaseApiUrl;
 
     public string UpdateReleasePageUrl => _settings.UpdateReleasePageUrl;
@@ -222,6 +242,7 @@ internal sealed class SettingsViewModel : ObservableObject
             UpdateChannel = _settings.UpdateChannel;
             UpdateAutoCheckEnabled = _settings.UpdateAutoCheckEnabled;
             UpdateCheckOnStartup = _settings.UpdateCheckOnStartup;
+            UpdateConnectionTimeoutSeconds = _settings.UpdateConnectionTimeoutSeconds;
         }
         finally
         {
@@ -307,6 +328,7 @@ internal sealed class SettingsViewModel : ObservableObject
         UpdateChannel = UpdateChannel.Stable;
         UpdateAutoCheckEnabled = true;
         UpdateCheckOnStartup = true;
+        UpdateConnectionTimeoutSeconds = 120;
         AppendLog(LogVerbosity.Display, "已恢复整体设置推荐值。");
     }
 

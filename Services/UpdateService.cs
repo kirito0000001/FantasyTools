@@ -38,15 +38,22 @@ internal sealed class UpdateService
     public async Task<UpdateCheckResult> CheckAsync(
         string releasesApiUrl,
         UpdateChannel channel,
+        int timeoutSeconds,
         CancellationToken cancellationToken)
     {
-        var release = await GetReleaseAsync(releasesApiUrl, channel, cancellationToken);
+        var release = await RunWithTimeoutAsync(
+            token => GetReleaseAsync(releasesApiUrl, channel, token),
+            timeoutSeconds,
+            cancellationToken);
         if (release is null)
         {
             return new UpdateCheckResult(false, CurrentVersion, null, null, null, "没有找到可用 Release。", string.Empty);
         }
 
-        var manifest = await BuildManifestAsync(release, channel, cancellationToken);
+        var manifest = await RunWithTimeoutAsync(
+            token => BuildManifestAsync(release, channel, token),
+            timeoutSeconds,
+            cancellationToken);
         var latestVersion = ParseVersion(manifest.Version);
         if (latestVersion <= CurrentVersion)
         {
@@ -93,6 +100,24 @@ internal sealed class UpdateService
             asset,
             $"发现新版本：{CurrentVersion} -> {latestVersion}",
             manifest.ReleaseNotesUrl);
+    }
+
+    public async Task<UpdateConnectionTestResult> MeasureConnectionAsync(
+        string releasesApiUrl,
+        UpdateChannel channel,
+        int timeoutSeconds,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var release = await RunWithTimeoutAsync(
+            token => GetReleaseAsync(releasesApiUrl, channel, token),
+            timeoutSeconds,
+            cancellationToken);
+        stopwatch.Stop();
+
+        return release is null
+            ? new UpdateConnectionTestResult(true, stopwatch.Elapsed, "GitHub 可以连接，但当前通道没有找到 Release。")
+            : new UpdateConnectionTestResult(true, stopwatch.Elapsed, $"GitHub 连接正常，最新远端版本：{release.TagName}");
     }
 
     public async Task<UpdateDownloadResult> DownloadAndVerifyAsync(
@@ -367,6 +392,26 @@ internal sealed class UpdateService
             ?? throw new InvalidOperationException("远端 JSON 无法读取。");
     }
 
+    private static async Task<T> RunWithTimeoutAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        int timeoutSeconds,
+        CancellationToken cancellationToken)
+    {
+        var normalizedTimeoutSeconds = Math.Clamp(timeoutSeconds, 10, 600);
+        using var timeoutCancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(normalizedTimeoutSeconds));
+        using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutCancellationTokenSource.Token);
+        try
+        {
+            return await operation(linkedCancellationTokenSource.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutCancellationTokenSource.IsCancellationRequested)
+        {
+            throw new TimeoutException($"GitHub 连接超时（{normalizedTimeoutSeconds} 秒）。请检查网络或稍后重试。");
+        }
+    }
+
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(path);
@@ -417,6 +462,7 @@ internal sealed class UpdateService
     private static HttpClient CreateHttpClient()
     {
         var client = new HttpClient();
+        client.Timeout = Timeout.InfiniteTimeSpan;
         client.DefaultRequestHeaders.UserAgent.ParseAdd("FantasyTools-Updater/1.0");
         return client;
     }

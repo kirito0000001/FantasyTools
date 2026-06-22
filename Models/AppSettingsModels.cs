@@ -53,6 +53,8 @@ internal sealed class AppSettings
 
     public bool UpdateCheckOnStartup { get; set; } = true;
 
+    public int UpdateConnectionTimeoutSeconds { get; set; } = 120;
+
     public DateTimeOffset? UpdateLastCheckAt { get; set; }
 
     public string? UpdateLastStatus { get; set; }

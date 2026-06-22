@@ -1478,10 +1478,31 @@
                                         <TextBlock Text="启动时后台检查" VerticalAlignment="Center" />
                                         <ToggleSwitch Grid.Column="1" IsOn="{Binding Settings.UpdateCheckOnStartup, Mode=TwoWay}" VerticalAlignment="Center" />
                                     </Grid>
+                                    <Grid MinHeight="44" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="最长连接时间" />
+                                            <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding Settings.UpdateConnectionTimeoutText, Mode=OneWay}" />
+                                        </StackPanel>
+                                        <NumberBox
+                                            Grid.Column="1"
+                                            AcceptsExpression="False"
+                                            LargeChange="30"
+                                            Maximum="600"
+                                            Minimum="10"
+                                            SmallChange="10"
+                                            SpinButtonPlacementMode="Compact"
+                                            ValidationMode="InvalidInputOverwritten"
+                                            Value="{Binding Settings.UpdateConnectionTimeoutSeconds, Mode=TwoWay}" />
+                                    </Grid>
                                     <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding Settings.UpdateLastCheckText, Mode=OneWay}" />
                                     <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding Settings.UpdateLastStatus, Mode=OneWay}" />
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Button Click="CheckUpdateButton_Click" Content="检查更新" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                        <Button Click="TestUpdateConnectionButton_Click" Content="测试 GitHub 连接" Style="{StaticResource PrimaryToolButtonStyle}" />
                                         <Button Click="OpenReleasePageButton_Click" Content="打开 Release 页面" Style="{StaticResource PrimaryToolButtonStyle}" />
                                     </StackPanel>
                                 </StackPanel>

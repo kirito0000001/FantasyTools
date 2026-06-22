@@ -1037,6 +1037,11 @@ namespace FantasyTools
             await CheckForUpdatesAsync(showNoUpdateTip: true, allowUpdatePrompt: true);
         }
 
+        private async void TestUpdateConnectionButton_Click(object sender, RoutedEventArgs e)
+        {
+            await TestUpdateConnectionAsync();
+        }
+
         private async void OpenReleasePageButton_Click(object sender, RoutedEventArgs e)
         {
             await _updateService.OpenReleasePageAsync(_viewModel.Settings.UpdateReleasePageUrl);
@@ -1069,6 +1074,7 @@ namespace FantasyTools
                 var result = await _updateService.CheckAsync(
                     _viewModel.Settings.UpdateReleaseApiUrl,
                     _viewModel.Settings.UpdateChannel,
+                    _viewModel.Settings.UpdateConnectionTimeoutSecondsValue,
                     isStartupCheck ? CancellationToken.None : GetGlobalProgressCancellationToken());
                 _viewModel.Settings.SetUpdateStatus(result.Message);
                 if (!isStartupCheck)
@@ -1097,6 +1103,21 @@ namespace FantasyTools
                 CompleteGlobalProgress("检查已取消", "没有下载或替换任何文件。");
                 await HideGlobalProgressAfterDelayAsync();
             }
+            catch (TimeoutException ex)
+            {
+                _viewModel.Settings.SetUpdateStatus(ex.Message);
+                if (!isStartupCheck)
+                {
+                    CompleteGlobalProgress("GitHub 连接超时", ex.Message);
+                    await HideGlobalProgressAfterDelayAsync();
+                }
+
+                ShowFloatingTip(
+                    InfoBarSeverity.Warning,
+                    "GitHub 连接超时",
+                    ex.Message,
+                    $"热更新连接超时：{ex}");
+            }
             catch (Exception ex)
             {
                 _viewModel.Settings.SetUpdateStatus($"热更新检查失败：{ex.Message}");
@@ -1111,6 +1132,57 @@ namespace FantasyTools
                     "热更新检查失败",
                     "无法连接或读取 GitHub Release，可稍后重试。",
                     $"热更新检查失败：{ex}");
+            }
+        }
+
+        private async Task TestUpdateConnectionAsync()
+        {
+            ShowGlobalProgress("测试 GitHub 连接", "正在访问 GitHub Release...");
+            UpdateGlobalProgress(
+                "正在访问 GitHub Release...",
+                20,
+                $"最长 { _viewModel.Settings.UpdateConnectionTimeoutSecondsValue } 秒",
+                true);
+            try
+            {
+                var result = await _updateService.MeasureConnectionAsync(
+                    _viewModel.Settings.UpdateReleaseApiUrl,
+                    _viewModel.Settings.UpdateChannel,
+                    _viewModel.Settings.UpdateConnectionTimeoutSecondsValue,
+                    GetGlobalProgressCancellationToken());
+                var message = $"{result.Message}；耗时 {result.Elapsed.TotalSeconds:0.0} 秒。";
+                _viewModel.Settings.SetUpdateStatus(message);
+                CompleteGlobalProgress("GitHub 连接正常", message);
+                ShowFloatingTip(InfoBarSeverity.Success, "GitHub 连接正常", message);
+                await HideGlobalProgressAfterDelayAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                CompleteGlobalProgress("测速已取消", "没有进行更新检查或下载。");
+                await HideGlobalProgressAfterDelayAsync();
+            }
+            catch (TimeoutException ex)
+            {
+                _viewModel.Settings.SetUpdateStatus(ex.Message);
+                CompleteGlobalProgress("GitHub 连接超时", ex.Message);
+                ShowFloatingTip(
+                    InfoBarSeverity.Warning,
+                    "GitHub 连接超时",
+                    ex.Message,
+                    $"GitHub 连接测速超时：{ex}");
+                await HideGlobalProgressAfterDelayAsync();
+            }
+            catch (Exception ex)
+            {
+                var message = $"GitHub 连接失败：{ex.Message}";
+                _viewModel.Settings.SetUpdateStatus(message);
+                CompleteGlobalProgress("GitHub 连接失败", ex.Message);
+                ShowFloatingTip(
+                    InfoBarSeverity.Warning,
+                    "GitHub 连接失败",
+                    "无法连接 GitHub Release，可稍后重试。",
+                    $"GitHub 连接测速失败：{ex}");
+                await HideGlobalProgressAfterDelayAsync();
             }
         }
 

@@ -104,3 +104,8 @@ internal sealed record UpdateDownloadResult(
     string PackagePath,
     UpdateManifest Manifest,
     UpdateAssetManifest Asset);
+
+internal sealed record UpdateConnectionTestResult(
+    bool IsSuccess,
+    TimeSpan Elapsed,
+    string Message);
