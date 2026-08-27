@@ -28,6 +28,11 @@ namespace FantasyTools
     {
         private Window? _window;
 
+        public static ElementTheme CurrentActualTheme =>
+            Current is App { _window.Content: FrameworkElement rootElement }
+                ? rootElement.ActualTheme
+                : ElementTheme.Light;
+
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
         /// executed, and as such is the logical equivalent of main() or WinMain().

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Reflection;
 using FantasyTools.Models;
 
 namespace FantasyTools.ViewModels;
@@ -13,7 +15,8 @@ internal sealed class ApplicationViewModel : ObservableObject
         CharactersViewModel characters,
         CharacterDetailViewModel characterDetail,
         HandCardsViewModel handCards,
-        HandCardDetailViewModel handCardDetail)
+        HandCardDetailViewModel handCardDetail,
+        DeveloperReleaseViewModel developerRelease)
     {
         Settings = settings;
         GlobalProgress = globalProgress;
@@ -21,6 +24,7 @@ internal sealed class ApplicationViewModel : ObservableObject
         CharacterDetail = characterDetail;
         HandCards = handCards;
         HandCardDetail = handCardDetail;
+        DeveloperRelease = developerRelease;
     }
 
     public SettingsViewModel Settings { get; }
@@ -34,6 +38,12 @@ internal sealed class ApplicationViewModel : ObservableObject
     public HandCardsViewModel HandCards { get; }
 
     public HandCardDetailViewModel HandCardDetail { get; }
+
+    public DeveloperReleaseViewModel DeveloperRelease { get; }
+
+    public string AppVersionText { get; } = ResolveAppVersionText();
+
+    public string AboutVersionText => $"版本 {AppVersionText}";
 
     public IReadOnlyList<ToolboxModuleDefinition> Modules { get; } =
     [
@@ -60,5 +70,36 @@ internal sealed class ApplicationViewModel : ObservableObject
         }
 
         return null;
+    }
+
+    private static string ResolveAppVersionText()
+    {
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
+        }
+
+        return FormatDisplayVersion(version.Split('+', StringSplitOptions.RemoveEmptyEntries)[0].Trim());
+    }
+
+    private static string FormatDisplayVersion(string version)
+    {
+        var parts = version.Split('-', 2, StringSplitOptions.RemoveEmptyEntries);
+        var coreVersion = parts[0].Trim().TrimStart('v', 'V');
+        if (parts.Length == 1)
+        {
+            return coreVersion;
+        }
+
+        var label = parts[1].Trim();
+        if (label.StartsWith("beta", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"V{coreVersion}-Beta";
+        }
+
+        return $"V{coreVersion}-{label}";
     }
 }

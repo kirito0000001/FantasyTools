@@ -15,6 +15,12 @@ internal enum UpdateChannel
     Beta
 }
 
+internal enum UpdateSource
+{
+    GitHub,
+    Gitee
+}
+
 internal sealed class AppSettings
 {
     public string? ProjectRootPath { get; set; }
@@ -28,6 +34,8 @@ internal sealed class AppSettings
     public bool ShowWorkspacePath { get; set; }
 
     public bool ShowCurrentModule { get; set; }
+
+    public bool UseSuitColoredHandCards { get; set; } = true;
 
     public bool LogEnabled { get; set; }
 
@@ -48,6 +56,8 @@ internal sealed class AppSettings
     public int UnrealSyncBackupLimit { get; set; } = 2;
 
     public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
+
+    public UpdateSource UpdateSource { get; set; } = UpdateSource.GitHub;
 
     public bool UpdateAutoCheckEnabled { get; set; } = true;
 

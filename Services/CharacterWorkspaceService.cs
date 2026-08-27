@@ -280,15 +280,8 @@ internal sealed class CharacterWorkspaceService
 
     public string ExportCharacter(string projectRootPath, string code)
     {
-        var character = GetCharacter(projectRootPath, code);
-        var exportRoot = Path.Combine(projectRootPath, "Exports", "Characters");
-        Directory.CreateDirectory(exportRoot);
-
-        var exportPath = Path.Combine(
-            exportRoot,
-            $"{DateTime.Now:yyyyMMdd-HHmmss}-{character.Code}");
-        CopyDirectory(character.Path, exportPath);
-        return exportPath;
+        _ = GetCharacter(projectRootPath, code);
+        return new WorkspaceTransferService().ExportCharacters(projectRootPath, [code]);
     }
 
     public string DeleteCharacterWithBackup(string projectRootPath, string code)
@@ -369,7 +362,7 @@ internal sealed class CharacterWorkspaceService
     private static void SaveMeta(string characterPath, CharacterMeta meta)
     {
         var json = JsonSerializer.Serialize(meta, AppJsonSerializerContext.Default.CharacterMeta);
-        File.WriteAllText(Path.Combine(characterPath, CharacterMetaFileName), json);
+        JsonFileWriteService.WriteAtomic(Path.Combine(characterPath, CharacterMetaFileName), json);
     }
 
     private string BuildUniqueCharacterCode(string projectRootPath, string baseCode)

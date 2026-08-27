@@ -51,14 +51,38 @@ internal sealed class HandCardDetailViewModel : ObservableObject
     private string _noticeMessage = "从手牌卡进入后，在这里维护手牌基础数据。";
     private bool _isNoticeOpen = true;
     private bool _showBasicDeckBreadcrumb;
+    private BasicDeckSlotBinding? _basicDeckBinding;
+    private bool _isBasicDeckLocked;
     private bool _isLoading;
     private bool _isDirty;
+    private long _editVersion;
 
     public ObservableCollection<EditableTextEntry> FunctionGroups { get; } = [];
 
     public bool HasHandCard => _currentHandCard is not null;
 
     public bool IsDirty => _isDirty;
+
+    public long EditVersion => _editVersion;
+
+    public bool IsBasicDeckLocked
+    {
+        get => _isBasicDeckLocked;
+        private set
+        {
+            if (SetProperty(ref _isBasicDeckLocked, value))
+            {
+                OnPropertyChanged(nameof(CanEditPokerIdentity));
+                OnPropertyChanged(nameof(BasicDeckLockMessage));
+            }
+        }
+    }
+
+    public bool CanEditPokerIdentity => !IsBasicDeckLocked;
+
+    public string BasicDeckLockMessage => _basicDeckBinding is null
+        ? string.Empty
+        : $"已填入牌堆：{_basicDeckBinding.DisplayName}。花色和扑克数字由槽位决定，需要更改时请回到牌堆设置页调整绑定。";
 
     public IReadOnlyList<OptionItem> Suits => SuitOptions;
 
@@ -245,19 +269,20 @@ internal sealed class HandCardDetailViewModel : ObservableObject
         set => SetProperty(ref _showBasicDeckBreadcrumb, value);
     }
 
-    public void Load(HandCardInfo handCard)
+    public void Load(HandCardInfo handCard, BasicDeckSlotBinding? basicDeckBinding = null)
     {
         _isLoading = true;
         try
         {
             _currentHandCard = handCard;
+            _basicDeckBinding = basicDeckBinding;
             Code = handCard.Code;
             CodeEditText = handCard.Code;
             Name = handCard.Meta.Name;
             CardFacePath = handCard.CardFacePath;
             Description = handCard.Meta.Description;
-            Suit = handCard.Meta.Suit;
-            PokerNumber = handCard.Meta.PokerNumber;
+            Suit = basicDeckBinding?.Suit ?? handCard.Meta.Suit;
+            PokerNumber = basicDeckBinding?.Number ?? handCard.Meta.PokerNumber;
             CardType = handCard.Meta.CardType;
             RemainingUseCount = handCard.Meta.RemainingUseCount;
             EquipType = handCard.Meta.EquipType;
@@ -265,9 +290,13 @@ internal sealed class HandCardDetailViewModel : ObservableObject
             Expression = handCard.Meta.Expression;
             ReplaceEntries(FunctionGroups, handCard.Meta.FunctionGroups);
             NoticeTitle = "手牌资料已打开";
-            NoticeMessage = "修改会自动保存；花色、卡牌类型和装备类型按 Unreal 枚举原名落盘。";
+            NoticeMessage = basicDeckBinding is null
+                ? "修改会自动保存；花色、卡牌类型和装备类型按 Unreal 枚举原名落盘；灵装只是玩家侧大类包装。"
+                : "修改会自动保存；当前手牌已填入牌堆，花色和扑克数字由槽位锁定。";
             IsNoticeOpen = true;
+            IsBasicDeckLocked = basicDeckBinding is not null;
             _isDirty = false;
+            _editVersion = 0;
             SaveStatusText = "修改会自动保存。";
             LastUpdatedText = BuildLastUpdatedText(handCard.Meta.UpdatedAt);
             NotifyHeaderChanged();
@@ -285,8 +314,8 @@ internal sealed class HandCardDetailViewModel : ObservableObject
         current.Name = string.IsNullOrWhiteSpace(Name) ? Code : Name.Trim();
         current.CardFaceFileName = current.CardFaceFileName;
         current.Description = Description;
-        current.Suit = Suit;
-        current.PokerNumber = Math.Clamp((int)Math.Round(PokerNumber), 1, 13);
+        current.Suit = _basicDeckBinding?.Suit ?? Suit;
+        current.PokerNumber = _basicDeckBinding?.Number ?? Math.Clamp((int)Math.Round(PokerNumber), 1, 13);
         current.CardType = CardType;
         current.FunctionGroups = NormalizeEntries(FunctionGroups);
         current.RemainingUseCount = (int)Math.Round(RemainingUseCount);
@@ -296,15 +325,34 @@ internal sealed class HandCardDetailViewModel : ObservableObject
         return current;
     }
 
-    public void ApplySavedHandCard(HandCardInfo handCard)
+    public void ApplySavedHandCard(HandCardInfo handCard, long savedEditVersion)
     {
-        _currentHandCard = handCard;
-        Code = handCard.Code;
-        CodeEditText = handCard.Code;
-        Name = handCard.Meta.Name;
-        CardFacePath = handCard.CardFacePath;
-        _isDirty = false;
-        SaveStatusText = $"已保存：{DateTime.Now:HH:mm:ss}";
+        _isLoading = true;
+        try
+        {
+            _currentHandCard = handCard;
+            Code = handCard.Code;
+            CodeEditText = handCard.Code;
+            Name = handCard.Meta.Name;
+            CardFacePath = handCard.CardFacePath;
+            Suit = _basicDeckBinding?.Suit ?? handCard.Meta.Suit;
+            PokerNumber = _basicDeckBinding?.Number ?? handCard.Meta.PokerNumber;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+
+        if (savedEditVersion == _editVersion)
+        {
+            _isDirty = false;
+            SaveStatusText = $"已保存：{DateTime.Now:HH:mm:ss}";
+        }
+        else
+        {
+            _isDirty = true;
+            SaveStatusText = "有新修改，等待自动保存...";
+        }
         LastUpdatedText = BuildLastUpdatedText(handCard.Meta.UpdatedAt);
         NotifyHeaderChanged();
     }
@@ -346,6 +394,7 @@ internal sealed class HandCardDetailViewModel : ObservableObject
 
     private void MarkEdited()
     {
+        _editVersion++;
         _isDirty = true;
         SaveStatusText = "有修改，等待自动保存...";
         NotifyHeaderChanged();
@@ -358,6 +407,7 @@ internal sealed class HandCardDetailViewModel : ObservableObject
         OnPropertyChanged(nameof(BreadcrumbText));
         OnPropertyChanged(nameof(DetailBreadcrumbText));
         OnPropertyChanged(nameof(HasHandCard));
+        OnPropertyChanged(nameof(BasicDeckLockMessage));
     }
 
     private static string FormatSuitNumber(string suit, double number)

@@ -11,6 +11,7 @@ internal sealed class HandCardWorkspaceService
 {
     public const string HandCardsFolderName = "HandCards";
     public const string HandCardMetaFileName = "handcard.meta.json";
+    public const string BasicDeckSettingsFileName = "basic-deck.settings.json";
     public const string CardFaceFileName = "CardFace.png";
     private static readonly string[] LegacyCardFaceFileNames = ["CardFace.jpeg", "CardFace.jpg"];
     public const int HandCardFaceWidth = 357;
@@ -89,6 +90,98 @@ internal sealed class HandCardWorkspaceService
             .ToList();
     }
 
+    public BasicDeckSettings GetBasicDeckSettings(string projectRootPath)
+    {
+        var handCardsFolderPath = GetHandCardsFolderPath(projectRootPath);
+        Directory.CreateDirectory(handCardsFolderPath);
+        var settingsPath = Path.Combine(handCardsFolderPath, BasicDeckSettingsFileName);
+        if (!File.Exists(settingsPath))
+        {
+            return new BasicDeckSettings();
+        }
+
+        try
+        {
+            var json = File.ReadAllText(settingsPath);
+            return JsonSerializer.Deserialize(json, AppJsonSerializerContext.Default.BasicDeckSettings) ?? new BasicDeckSettings();
+        }
+        catch
+        {
+            return new BasicDeckSettings();
+        }
+    }
+
+    public void SetBasicDeckSlot(string projectRootPath, int deckIndex, string suit, int number, string handCardCode)
+    {
+        var code = SanitizeHandCardCode(handCardCode);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw new InvalidOperationException("请选择要填入的手牌。");
+        }
+
+        var handCard = GetHandCard(projectRootPath, code);
+        var settings = GetBasicDeckSettings(projectRootPath);
+        var slotKey = BuildBasicDeckSlotKey(deckIndex, suit, number);
+        var existingBinding = FindBasicDeckBinding(settings, code);
+        var normalizedSuit = NormalizeOption(suit, "Hearts");
+        var normalizedNumber = Math.Clamp(number, 1, 13);
+        if (existingBinding is not null &&
+            (existingBinding.DeckIndex != Math.Clamp(deckIndex, 1, 4) ||
+             !string.Equals(existingBinding.Suit, normalizedSuit, StringComparison.OrdinalIgnoreCase) ||
+             existingBinding.Number != normalizedNumber))
+        {
+            throw new InvalidOperationException($"{handCard.Name} 已绑定到 {existingBinding.DisplayName}，不能同时填入多个槽位。");
+        }
+
+        handCard.Meta.Suit = normalizedSuit;
+        handCard.Meta.PokerNumber = normalizedNumber;
+        handCard.Meta.UpdatedAt = DateTimeOffset.Now;
+        SaveMeta(handCard.Path, handCard.Meta);
+
+        if (deckIndex == 1)
+        {
+            settings.Slots.Remove(BuildLegacyBasicDeckSlotKey(suit, number));
+        }
+
+        RemoveBasicDeckBindingsForHandCard(settings, code);
+        settings.Slots[slotKey] = code;
+        SaveBasicDeckSettings(projectRootPath, settings);
+    }
+
+    public void ClearBasicDeckSlot(string projectRootPath, int deckIndex, string suit, int number)
+    {
+        var settings = GetBasicDeckSettings(projectRootPath);
+        settings.Slots.Remove(BuildBasicDeckSlotKey(deckIndex, suit, number));
+        if (deckIndex == 1)
+        {
+            settings.Slots.Remove(BuildLegacyBasicDeckSlotKey(suit, number));
+        }
+
+        SaveBasicDeckSettings(projectRootPath, settings);
+    }
+
+    public BasicDeckSlotBinding? GetBasicDeckBindingForHandCard(string projectRootPath, string handCardCode)
+    {
+        var code = SanitizeHandCardCode(handCardCode);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        return FindBasicDeckBinding(GetBasicDeckSettings(projectRootPath), code);
+    }
+
+    public BasicDeckSlotBinding? GetBasicDeckBindingForHandCard(BasicDeckSettings settings, string handCardCode)
+    {
+        var code = SanitizeHandCardCode(handCardCode);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        return FindBasicDeckBinding(settings, code);
+    }
+
     public HandCardInfo GetHandCard(string projectRootPath, string code)
     {
         var handCardPath = BuildHandCardFolderPath(projectRootPath, code);
@@ -118,8 +211,17 @@ internal sealed class HandCardWorkspaceService
         meta.Name = string.IsNullOrWhiteSpace(meta.Name) ? code : meta.Name.Trim();
         meta.CardFaceFileName = string.IsNullOrWhiteSpace(meta.CardFaceFileName) ? CardFaceFileName : meta.CardFaceFileName;
         meta.Description = meta.Description.Trim();
-        meta.Suit = NormalizeOption(meta.Suit, "Hearts");
-        meta.PokerNumber = Math.Clamp(meta.PokerNumber, 1, 13);
+        var basicDeckBinding = GetBasicDeckBindingForHandCard(projectRootPath, code);
+        if (basicDeckBinding is null)
+        {
+            meta.Suit = NormalizeOption(meta.Suit, "Hearts");
+            meta.PokerNumber = Math.Clamp(meta.PokerNumber, 1, 13);
+        }
+        else
+        {
+            meta.Suit = basicDeckBinding.Suit;
+            meta.PokerNumber = basicDeckBinding.Number;
+        }
         meta.CardType = NormalizeOption(meta.CardType, "Base");
         meta.FunctionGroups = NormalizeEntries(meta.FunctionGroups);
         meta.EquipType = NormalizeOption(meta.EquipType, "Weapon");
@@ -215,15 +317,8 @@ internal sealed class HandCardWorkspaceService
 
     public string ExportHandCard(string projectRootPath, string code)
     {
-        var handCard = GetHandCard(projectRootPath, code);
-        var exportRoot = Path.Combine(projectRootPath, "Exports", "HandCards");
-        Directory.CreateDirectory(exportRoot);
-
-        var exportPath = Path.Combine(
-            exportRoot,
-            $"{DateTime.Now:yyyyMMdd-HHmmss}-{handCard.Code}");
-        CopyDirectory(handCard.Path, exportPath);
-        return exportPath;
+        _ = GetHandCard(projectRootPath, code);
+        return new WorkspaceTransferService().ExportHandCards(projectRootPath, [code]);
     }
 
     public string DeleteHandCardWithBackup(string projectRootPath, string code)
@@ -268,6 +363,86 @@ internal sealed class HandCardWorkspaceService
             !File.Exists(cardFacePath));
     }
 
+    private static void SaveBasicDeckSettings(string projectRootPath, BasicDeckSettings settings)
+    {
+        var handCardsFolderPath = Path.Combine(projectRootPath, HandCardsFolderName);
+        Directory.CreateDirectory(handCardsFolderPath);
+        var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.Default.BasicDeckSettings);
+        JsonFileWriteService.WriteAtomic(Path.Combine(handCardsFolderPath, BasicDeckSettingsFileName), json);
+    }
+
+    public static string BuildBasicDeckSlotKey(int deckIndex, string suit, int number)
+    {
+        return $"{Math.Clamp(deckIndex, 1, 4).ToString(System.Globalization.CultureInfo.InvariantCulture)}:{NormalizeOption(suit, "Hearts")}:{Math.Clamp(number, 1, 13).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    public static string BuildLegacyBasicDeckSlotKey(string suit, int number)
+    {
+        return $"{NormalizeOption(suit, "Hearts")}:{Math.Clamp(number, 1, 13).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    private static BasicDeckSlotBinding? FindBasicDeckBinding(BasicDeckSettings settings, string handCardCode)
+    {
+        var code = SanitizeHandCardCode(handCardCode);
+        foreach (var (slotKey, boundCode) in settings.Slots)
+        {
+            if (!string.Equals(SanitizeHandCardCode(boundCode), code, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (TryParseBasicDeckSlotKey(slotKey, out var binding))
+            {
+                return binding;
+            }
+        }
+
+        return null;
+    }
+
+    private static void RemoveBasicDeckBindingsForHandCard(BasicDeckSettings settings, string handCardCode)
+    {
+        var code = SanitizeHandCardCode(handCardCode);
+        var keys = settings.Slots
+            .Where(entry => string.Equals(SanitizeHandCardCode(entry.Value), code, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => entry.Key)
+            .ToList();
+        foreach (var key in keys)
+        {
+            settings.Slots.Remove(key);
+        }
+    }
+
+    private static bool TryParseBasicDeckSlotKey(string slotKey, out BasicDeckSlotBinding binding)
+    {
+        binding = new BasicDeckSlotBinding(1, "Hearts", 1, slotKey);
+        var parts = slotKey.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 3 &&
+            int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var deckIndex) &&
+            int.TryParse(parts[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var number))
+        {
+            binding = new BasicDeckSlotBinding(
+                Math.Clamp(deckIndex, 1, 4),
+                NormalizeOption(parts[1], "Hearts"),
+                Math.Clamp(number, 1, 13),
+                slotKey);
+            return true;
+        }
+
+        if (parts.Length == 2 &&
+            int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var legacyNumber))
+        {
+            binding = new BasicDeckSlotBinding(
+                1,
+                NormalizeOption(parts[0], "Hearts"),
+                Math.Clamp(legacyNumber, 1, 13),
+                slotKey);
+            return true;
+        }
+
+        return false;
+    }
+
     private static HandCardMeta? ReadMeta(string metaPath)
     {
         if (!File.Exists(metaPath))
@@ -305,7 +480,7 @@ internal sealed class HandCardWorkspaceService
     private static void SaveMeta(string handCardPath, HandCardMeta meta)
     {
         var json = JsonSerializer.Serialize(meta, AppJsonSerializerContext.Default.HandCardMeta);
-        File.WriteAllText(Path.Combine(handCardPath, HandCardMetaFileName), json);
+        JsonFileWriteService.WriteAtomic(Path.Combine(handCardPath, HandCardMetaFileName), json);
     }
 
     private static List<string> NormalizeEntries(IEnumerable<string>? entries)

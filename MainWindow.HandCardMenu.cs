@@ -13,6 +13,12 @@ namespace FantasyTools
     {
         private void HandCard_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
         {
+            if (IsExportSelectionActive(Models.WorkspaceTransferKind.HandCards))
+            {
+                args.Handled = true;
+                return;
+            }
+
             if (sender is not FrameworkElement { DataContext: HandCardViewModel card } element ||
                 card.IsAddCard)
             {
@@ -34,6 +40,12 @@ namespace FantasyTools
 
         private void HandCard_KeyDown(object sender, KeyRoutedEventArgs e)
         {
+            if (IsExportSelectionActive(Models.WorkspaceTransferKind.HandCards))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key != VirtualKey.Delete ||
                 sender is not FrameworkElement { DataContext: HandCardViewModel card } ||
                 card.IsAddCard)

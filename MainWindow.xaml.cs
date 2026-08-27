@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.ComponentModel;
 using FantasyTools.Models;
 using FantasyTools.Services;
 using FantasyTools.ViewModels;
@@ -28,6 +31,7 @@ namespace FantasyTools
         private readonly WinUiDialogService _dialogService;
         private readonly CharacterWorkspaceService _characterWorkspaceService;
         private readonly HandCardWorkspaceService _handCardWorkspaceService;
+        private readonly WorkspaceTransferService _workspaceTransferService;
         private readonly UpdateService _updateService;
         private readonly DispatcherQueueTimer _globalProgressElapsedTimer;
         private readonly DispatcherQueueTimer _characterDetailSaveTimer;
@@ -49,6 +53,7 @@ namespace FantasyTools
             var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
             _characterWorkspaceService = new CharacterWorkspaceService();
             _handCardWorkspaceService = new HandCardWorkspaceService();
+            _workspaceTransferService = new WorkspaceTransferService();
             _updateService = new UpdateService();
             var settings = new SettingsViewModel(new AppSettingsService(), new LogService(), new ProjectRootMigrationService());
             _viewModel = new ApplicationViewModel(
@@ -57,7 +62,8 @@ namespace FantasyTools
                 new CharactersViewModel(_characterWorkspaceService, defaultCardFacePath),
                 new CharacterDetailViewModel(),
                 new HandCardsViewModel(_handCardWorkspaceService, defaultCardFacePath),
-                new HandCardDetailViewModel());
+                new HandCardDetailViewModel(),
+                new DeveloperReleaseViewModel(new DeveloperReleaseService()));
             _dialogService = new WinUiDialogService(() => RootGrid.XamlRoot);
             RootGrid.DataContext = _viewModel;
             RegisterHelpKeyboardAccelerators();
@@ -66,12 +72,16 @@ namespace FantasyTools
             AppWindow.Resize(new SizeInt32(1500, 920));
             ApplyInitialWindowPlacement();
             settings.LoadAndEnsureProjectRoot();
+            settings.PropertyChanged += Settings_PropertyChanged;
+            _viewModel.HandCards.UseSuitColoredCards = settings.UseSuitColoredHandCards;
             _viewModel.Characters.Load(settings.ProjectRootPath);
             _viewModel.HandCards.Load(settings.ProjectRootPath);
             SyncThemePreferenceComboBox();
+            SyncUpdateSourceComboBox();
             SyncUpdateChannelComboBox();
             ApplyTheme();
             ShowPage(ToolboxModuleKey.Characters);
+            _ = _viewModel.DeveloperRelease.RefreshAsync();
             _ = CheckUpdateOnStartupAsync();
         }
 
@@ -86,6 +96,14 @@ namespace FantasyTools
 
             _viewModel.SelectedModule = module.Key;
             ShowPage(module.Key);
+        }
+
+        private void Settings_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.UseSuitColoredHandCards))
+            {
+                _viewModel.HandCards.UseSuitColoredCards = _viewModel.Settings.UseSuitColoredHandCards;
+            }
         }
 
         private async void ChooseProjectRootButton_Click(object sender, RoutedEventArgs e)
@@ -109,7 +127,7 @@ namespace FantasyTools
             if (_viewModel.Settings.IsCurrentProjectRoot(projectRootPath))
             {
                 _viewModel.Settings.SetProjectRootStatus(
-                    InfoBarSeverity.Informational,
+                    InfoBarSeverity.Warning,
                     "目录未变化",
                     $"当前整体项目目录已经是：{projectRootPath}");
                 return;
@@ -222,6 +240,20 @@ namespace FantasyTools
                 : UpdateChannel.Stable;
         }
 
+        private void UpdateSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (UpdateSourceComboBox.SelectedIndex < 0)
+            {
+                return;
+            }
+
+            _viewModel.Settings.UpdateSource = UpdateSourceComboBox.SelectedIndex switch
+            {
+                1 => UpdateSource.Gitee,
+                _ => UpdateSource.GitHub
+            };
+        }
+
         private void RefreshShellButton_Click(object sender, RoutedEventArgs e)
         {
             _viewModel.Settings.EnsureCurrentProjectRoot();
@@ -247,6 +279,7 @@ namespace FantasyTools
 
             _viewModel.Settings.RestoreRecommendedDefaults();
             SyncThemePreferenceComboBox();
+            SyncUpdateSourceComboBox();
             SyncUpdateChannelComboBox();
             ApplyTheme();
             ShowFloatingTip(InfoBarSeverity.Success, "设置已恢复", "已恢复整体设置推荐值。");
@@ -311,6 +344,11 @@ namespace FantasyTools
                 return;
             }
 
+            if (TryToggleExportSelection(card))
+            {
+                return;
+            }
+
             if (card.IsAddCard)
             {
                 CreateCharacterButton_Click(sender, e);
@@ -318,6 +356,73 @@ namespace FantasyTools
             }
 
             OpenCharacterDetail(card.Code);
+        }
+
+        private async void OpenCharacterFilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            var missingNameBox = CreateFilterCheckBox("缺少中文名", _viewModel.Characters.FilterMissingName);
+            var incompleteBox = CreateFilterCheckBox("未设置完全", _viewModel.Characters.FilterIncomplete);
+            var multiPhaseBox = CreateFilterCheckBox("拥有多 Stage", _viewModel.Characters.FilterMultiPhase);
+            var missingSkillGroupsBox = CreateFilterCheckBox("未设置技能组", _viewModel.Characters.FilterMissingSkillGroups);
+
+            var content = CreateFilterDialogContent(
+                "勾选后只显示同时满足这些条件的角色。",
+                "资料状态",
+                missingNameBox,
+                incompleteBox,
+                multiPhaseBox,
+                missingSkillGroupsBox);
+
+            var result = await _dialogService.ShowContentAsync(new ContentDialogRequest(
+                "筛选角色",
+                content,
+                PrimaryButtonText: "应用",
+                SecondaryButtonText: "清除",
+                CloseButtonText: "取消",
+                DefaultButton: ContentDialogButton.Primary));
+            if (result == DialogResultKind.Primary)
+            {
+                _viewModel.Characters.SetFilters(
+                    IsChecked(missingNameBox),
+                    IsChecked(incompleteBox),
+                    IsChecked(multiPhaseBox),
+                    IsChecked(missingSkillGroupsBox));
+            }
+            else if (result == DialogResultKind.Secondary)
+            {
+                _viewModel.Characters.ClearFilters();
+            }
+        }
+
+        private async void OpenCharacterSortButton_Click(object sender, RoutedEventArgs e)
+        {
+            var updatedAtBox = CreateSortRadioButton("最近修改", CharacterSortKey.UpdatedAt, _viewModel.Characters.SortKey);
+            var displayNameBox = CreateSortRadioButton("中文名", CharacterSortKey.DisplayName, _viewModel.Characters.SortKey);
+            var codeBox = CreateSortRadioButton("英文代号", CharacterSortKey.Code, _viewModel.Characters.SortKey);
+            var phaseBox = CreateSortRadioButton("Stage 数量", CharacterSortKey.PhaseCount, _viewModel.Characters.SortKey);
+            var completionBox = CreateSortRadioButton("完成度", CharacterSortKey.Completion, _viewModel.Characters.SortKey);
+            var descendingBox = CreateDirectionRadioButton("降序", true, _viewModel.Characters.SortDescending);
+            var ascendingBox = CreateDirectionRadioButton("升序", false, _viewModel.Characters.SortDescending);
+
+            var content = CreateSortDialogContent(
+                "排序会在当前搜索和筛选结果内生效。",
+                [updatedAtBox, displayNameBox, codeBox, phaseBox, completionBox],
+                [descendingBox, ascendingBox]);
+
+            var result = await _dialogService.ShowContentAsync(new ContentDialogRequest(
+                "排序角色",
+                content,
+                PrimaryButtonText: "应用",
+                CloseButtonText: "取消",
+                DefaultButton: ContentDialogButton.Primary));
+            if (result != DialogResultKind.Primary)
+            {
+                return;
+            }
+
+            _viewModel.Characters.SetSort(
+                ReadSelectedSortKey<CharacterSortKey>(updatedAtBox, displayNameBox, codeBox, phaseBox, completionBox),
+                ReadSelectedDirection(descendingBox, ascendingBox));
         }
 
         private async void CreateHandCardButton_Click(object sender, RoutedEventArgs e)
@@ -388,6 +493,11 @@ namespace FantasyTools
                 return;
             }
 
+            if (TryToggleExportSelection(card))
+            {
+                return;
+            }
+
             if (card.IsAddCard)
             {
                 CreateHandCardButton_Click(sender, e);
@@ -395,6 +505,263 @@ namespace FantasyTools
             }
 
             OpenHandCardDetail(card.Code);
+        }
+
+        private async void OpenHandCardFilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            var baseCardBox = CreateFilterCheckBox("基本牌", _viewModel.HandCards.FilterBaseCards);
+            var eventCardBox = CreateFilterCheckBox("事件牌", _viewModel.HandCards.FilterEventCards);
+            var equipWeaponBox = CreateFilterCheckBox("装备牌-武器", _viewModel.HandCards.FilterEquipWeaponCards);
+            var equipArmorBox = CreateFilterCheckBox("装备牌-防具", _viewModel.HandCards.FilterEquipArmorCards);
+            var equipPropBox = CreateFilterCheckBox("装备牌-道具", _viewModel.HandCards.FilterEquipPropCards);
+            var judgeCardBox = CreateFilterCheckBox("共鸣牌", _viewModel.HandCards.FilterJudgeCards);
+            var heartsBox = CreateFilterCheckBox("红桃", _viewModel.HandCards.FilterHearts);
+            var diamondsBox = CreateFilterCheckBox("方片", _viewModel.HandCards.FilterDiamonds);
+            var clubsBox = CreateFilterCheckBox("梅花", _viewModel.HandCards.FilterClubs);
+            var spadesBox = CreateFilterCheckBox("黑桃", _viewModel.HandCards.FilterSpades);
+            var boundBox = CreateFilterCheckBox("已填入基本牌堆", _viewModel.HandCards.FilterBoundToBasicDeck);
+            var unboundBox = CreateFilterCheckBox("未填入基本牌堆", _viewModel.HandCards.FilterUnboundToBasicDeck);
+            var missingNameBox = CreateFilterCheckBox("未设置中文名", _viewModel.HandCards.FilterMissingName);
+            var incompleteBox = CreateFilterCheckBox("未设置完全", _viewModel.HandCards.FilterIncomplete);
+            var limitedUseBox = CreateFilterCheckBox("有使用限制", _viewModel.HandCards.FilterLimitedUse);
+
+            var content = CreateFilterDialogContent(
+                "勾选后只显示同时满足这些条件的手牌；卡牌类型内部可多选。",
+                "卡牌类型",
+                baseCardBox,
+                eventCardBox,
+                equipWeaponBox,
+                equipArmorBox,
+                equipPropBox,
+                judgeCardBox,
+                heartsBox,
+                diamondsBox,
+                clubsBox,
+                spadesBox,
+                boundBox,
+                unboundBox,
+                missingNameBox,
+                incompleteBox,
+                limitedUseBox);
+
+            var result = await _dialogService.ShowContentAsync(new ContentDialogRequest(
+                "筛选手牌",
+                content,
+                PrimaryButtonText: "应用",
+                SecondaryButtonText: "清除",
+                CloseButtonText: "取消",
+                DefaultButton: ContentDialogButton.Primary));
+            if (result == DialogResultKind.Primary)
+            {
+                _viewModel.HandCards.SetFilters(
+                    IsChecked(baseCardBox),
+                    IsChecked(eventCardBox),
+                    IsChecked(equipWeaponBox),
+                    IsChecked(equipArmorBox),
+                    IsChecked(equipPropBox),
+                    IsChecked(judgeCardBox),
+                    IsChecked(heartsBox),
+                    IsChecked(diamondsBox),
+                    IsChecked(clubsBox),
+                    IsChecked(spadesBox),
+                    IsChecked(boundBox),
+                    IsChecked(unboundBox),
+                    IsChecked(missingNameBox),
+                    IsChecked(incompleteBox),
+                    IsChecked(limitedUseBox));
+            }
+            else if (result == DialogResultKind.Secondary)
+            {
+                _viewModel.HandCards.ClearFilters();
+            }
+        }
+
+        private async void OpenHandCardSortButton_Click(object sender, RoutedEventArgs e)
+        {
+            var updatedAtBox = CreateSortRadioButton("最近修改", HandCardSortKey.UpdatedAt, _viewModel.HandCards.SortKey);
+            var displayNameBox = CreateSortRadioButton("中文名", HandCardSortKey.DisplayName, _viewModel.HandCards.SortKey);
+            var codeBox = CreateSortRadioButton("英文代号", HandCardSortKey.Code, _viewModel.HandCards.SortKey);
+            var cardTypeBox = CreateSortRadioButton("卡牌类型", HandCardSortKey.CardType, _viewModel.HandCards.SortKey);
+            var suitNumberBox = CreateSortRadioButton("花色数字", HandCardSortKey.SuitNumber, _viewModel.HandCards.SortKey);
+            var remainingUseBox = CreateSortRadioButton("剩余使用次数", HandCardSortKey.RemainingUseCount, _viewModel.HandCards.SortKey);
+            var descendingBox = CreateDirectionRadioButton("降序", true, _viewModel.HandCards.SortDescending);
+            var ascendingBox = CreateDirectionRadioButton("升序", false, _viewModel.HandCards.SortDescending);
+
+            var content = CreateSortDialogContent(
+                "排序会在当前搜索和筛选结果内生效。",
+                [updatedAtBox, displayNameBox, codeBox, cardTypeBox, suitNumberBox, remainingUseBox],
+                [descendingBox, ascendingBox]);
+
+            var result = await _dialogService.ShowContentAsync(new ContentDialogRequest(
+                "排序手牌",
+                content,
+                PrimaryButtonText: "应用",
+                CloseButtonText: "取消",
+                DefaultButton: ContentDialogButton.Primary));
+            if (result != DialogResultKind.Primary)
+            {
+                return;
+            }
+
+            _viewModel.HandCards.SetSort(
+                ReadSelectedSortKey<HandCardSortKey>(updatedAtBox, displayNameBox, codeBox, cardTypeBox, suitNumberBox, remainingUseBox),
+                ReadSelectedDirection(descendingBox, ascendingBox));
+        }
+
+        private static ScrollViewer CreateFilterDialogContent(string description, string groupTitle, params CheckBox[] checkBoxes)
+        {
+            var panel = new StackPanel
+            {
+                Width = 520,
+                Spacing = 12
+            };
+            panel.Children.Add(new TextBlock
+            {
+                Text = description,
+                TextWrapping = TextWrapping.Wrap
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = groupTitle,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            var filterGrid = new Grid
+            {
+                ColumnSpacing = 18
+            };
+            filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var leftColumn = new StackPanel { Spacing = 6 };
+            var rightColumn = new StackPanel { Spacing = 6 };
+            Grid.SetColumn(rightColumn, 1);
+            filterGrid.Children.Add(leftColumn);
+            filterGrid.Children.Add(rightColumn);
+            for (var index = 0; index < checkBoxes.Length; index++)
+            {
+                if (index % 2 == 0)
+                {
+                    leftColumn.Children.Add(checkBoxes[index]);
+                }
+                else
+                {
+                    rightColumn.Children.Add(checkBoxes[index]);
+                }
+            }
+
+            panel.Children.Add(filterGrid);
+
+            return new ScrollViewer
+            {
+                Width = 540,
+                MaxHeight = 560,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = panel
+            };
+        }
+
+        private static CheckBox CreateFilterCheckBox(string text, bool isChecked)
+        {
+            return new CheckBox
+            {
+                Content = text,
+                IsChecked = isChecked,
+                MinHeight = 32
+            };
+        }
+
+        private static bool IsChecked(CheckBox checkBox)
+        {
+            return checkBox.IsChecked == true;
+        }
+
+        private static StackPanel CreateSortDialogContent(string description, RadioButton[] sortButtons, RadioButton[] directionButtons)
+        {
+            var panel = new StackPanel
+            {
+                Width = 460,
+                Spacing = 12
+            };
+            panel.Children.Add(new TextBlock
+            {
+                Text = description,
+                TextWrapping = TextWrapping.Wrap
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "排序方式",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+            foreach (var button in sortButtons)
+            {
+                panel.Children.Add(button);
+            }
+
+            panel.Children.Add(new TextBlock
+            {
+                Margin = new Thickness(0, 8, 0, 0),
+                Text = "方向",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+            foreach (var button in directionButtons)
+            {
+                panel.Children.Add(button);
+            }
+
+            return panel;
+        }
+
+        private static RadioButton CreateSortRadioButton<TSortKey>(string text, TSortKey value, TSortKey current)
+            where TSortKey : struct, Enum
+        {
+            return new RadioButton
+            {
+                Content = text,
+                GroupName = "SortKey",
+                IsChecked = EqualityComparer<TSortKey>.Default.Equals(value, current),
+                MinHeight = 32,
+                Tag = value
+            };
+        }
+
+        private static RadioButton CreateDirectionRadioButton(string text, bool descending, bool currentDescending)
+        {
+            return new RadioButton
+            {
+                Content = text,
+                GroupName = "SortDirection",
+                IsChecked = descending == currentDescending,
+                MinHeight = 32,
+                Tag = descending
+            };
+        }
+
+        private static TSortKey ReadSelectedSortKey<TSortKey>(params RadioButton[] buttons)
+            where TSortKey : struct, Enum
+        {
+            foreach (var button in buttons)
+            {
+                if (button.IsChecked == true && button.Tag is TSortKey value)
+                {
+                    return value;
+                }
+            }
+
+            return buttons.FirstOrDefault()?.Tag is TSortKey fallback ? fallback : default;
+        }
+
+        private static bool ReadSelectedDirection(params RadioButton[] buttons)
+        {
+            foreach (var button in buttons)
+            {
+                if (button.IsChecked == true && button.Tag is bool descending)
+                {
+                    return descending;
+                }
+            }
+
+            return true;
         }
 
         private void OpenBasicDeckSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -442,11 +809,317 @@ namespace FantasyTools
                 return;
             }
 
-            var handCard = await CreateHandCardAsync(slot.Suit, slot.Number);
-            if (handCard is not null)
+            await ShowBasicDeckHandCardPickerAsync(slot);
+        }
+
+        private async void ChangeBasicDeckSlotButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not SuitDeckSlotViewModel slot)
             {
+                return;
+            }
+
+            await ShowBasicDeckHandCardPickerAsync(slot);
+        }
+
+        private async Task ShowBasicDeckHandCardPickerAsync(SuitDeckSlotViewModel slot)
+        {
+            var slotKey = HandCardWorkspaceService.BuildBasicDeckSlotKey(slot.DeckIndex, slot.Suit, slot.Number);
+            var basicDeckSettings = _handCardWorkspaceService.GetBasicDeckSettings(_viewModel.Settings.ProjectRootPath);
+            var handCards = _handCardWorkspaceService.GetHandCards(_viewModel.Settings.ProjectRootPath)
+                .Where(card =>
+                {
+                    var binding = _handCardWorkspaceService.GetBasicDeckBindingForHandCard(basicDeckSettings, card.Code);
+                    return binding is null ||
+                        string.Equals(binding.SlotKey, slotKey, StringComparison.OrdinalIgnoreCase) ||
+                        (binding.DeckIndex == slot.DeckIndex &&
+                         string.Equals(binding.Suit, slot.Suit, StringComparison.OrdinalIgnoreCase) &&
+                         binding.Number == slot.Number);
+                })
+                .OrderBy(card => card.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(card => card.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (handCards.Count == 0)
+            {
+                ShowFloatingTip(
+                    InfoBarSeverity.Warning,
+                    "没有可选手牌",
+                    "请先在手牌页面创建手牌，再填入牌堆槽位。");
+                return;
+            }
+
+            var selectedCode = slot.CardCode;
+            var defaultCardFacePath = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultCardFace.png");
+            var selectedText = new TextBlock
+            {
+                Style = GetAppResource<Style>("SubtleTextStyle"),
+                Text = string.IsNullOrWhiteSpace(selectedCode)
+                    ? "尚未选择手牌。"
+                    : $"已选择：{FindHandCardDisplayName(handCards, selectedCode)}"
+            };
+            var pickerButtons = new Dictionary<string, Button>(StringComparer.OrdinalIgnoreCase);
+            var pickerItemsPanel = new Grid
+            {
+                RowSpacing = 8,
+                ColumnSpacing = 8
+            };
+            void RefreshSelectedPickerItem()
+            {
+                foreach (var (code, button) in pickerButtons)
+                {
+                    if (string.Equals(code, selectedCode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        button.BorderBrush = GetAppResource<Brush>("AccentTextFillColorPrimaryBrush");
+                        button.BorderThickness = new Thickness(2);
+                    }
+                    else
+                    {
+                        button.BorderBrush = null;
+                        button.BorderThickness = new Thickness(0);
+                    }
+                }
+            }
+
+            void BuildPickerItems()
+            {
+                pickerItemsPanel.Children.Clear();
+                pickerItemsPanel.RowDefinitions.Clear();
+                pickerItemsPanel.ColumnDefinitions.Clear();
+                pickerButtons.Clear();
+                for (var column = 0; column < 4; column++)
+                {
+                    pickerItemsPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
+                }
+
+                var items = BuildBasicDeckPickerItems(handCards, defaultCardFacePath, selectedCode);
+                for (var index = 0; index < items.Count; index++)
+                {
+                    if (index % 4 == 0)
+                    {
+                        pickerItemsPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(230) });
+                    }
+
+                    var item = items[index];
+                    var button = CreateBasicDeckPickerButton(item, () =>
+                    {
+                        selectedCode = item.Code;
+                        selectedText.Text = $"已选择：{item.DisplayName}";
+                        RefreshSelectedPickerItem();
+                    });
+                    pickerButtons[item.Code] = button;
+                    Grid.SetColumn(button, index % 4);
+                    Grid.SetRow(button, index / 4);
+                    pickerItemsPanel.Children.Add(button);
+                }
+
+                RefreshSelectedPickerItem();
+            }
+
+            BuildPickerItems();
+
+            var scrollViewer = new ScrollViewer
+            {
+                MaxHeight = 520,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = pickerItemsPanel
+            };
+            var panel = new StackPanel
+            {
+                Width = 660,
+                Spacing = 12
+            };
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"选择要填入 {slot.DisplayTitle} 的已有手牌。",
+                TextWrapping = TextWrapping.Wrap
+            });
+            panel.Children.Add(selectedText);
+            panel.Children.Add(scrollViewer);
+
+            var result = await _dialogService.ShowContentAsync(new ContentDialogRequest(
+                slot.IsFilled ? "更改牌堆绑定" : "选择已有手牌",
+                panel,
+                PrimaryButtonText: "填入槽位",
+                SecondaryButtonText: slot.IsFilled ? "清空绑定" : null,
+                CloseButtonText: "取消",
+                DefaultButton: ContentDialogButton.Primary,
+                ConfigureDialog: dialog =>
+                {
+                    dialog.PrimaryButtonClick += (_, args) =>
+                    {
+                        if (string.IsNullOrWhiteSpace(selectedCode))
+                        {
+                            selectedText.Text = "请先选择一张手牌。";
+                            args.Cancel = true;
+                        }
+                    };
+                }));
+            if (result == DialogResultKind.Secondary)
+            {
+                try
+                {
+                    _handCardWorkspaceService.ClearBasicDeckSlot(
+                        _viewModel.Settings.ProjectRootPath,
+                        slot.DeckIndex,
+                        slot.Suit,
+                        slot.Number);
+                    _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+                    ShowFloatingTip(
+                        InfoBarSeverity.Success,
+                        "牌堆已清空",
+                        $"{slot.DisplayTitle} 已取消绑定。");
+                }
+                catch (Exception ex)
+                {
+                    ShowFloatingTip(
+                        InfoBarSeverity.Error,
+                        "牌堆清空失败",
+                        ex.Message,
+                        $"牌堆清空失败：{ex}");
+                }
+
+                return;
+            }
+
+            if (result != DialogResultKind.Primary || string.IsNullOrWhiteSpace(selectedCode))
+            {
+                return;
+            }
+
+            try
+            {
+                _handCardWorkspaceService.SetBasicDeckSlot(
+                    _viewModel.Settings.ProjectRootPath,
+                    slot.DeckIndex,
+                    slot.Suit,
+                    slot.Number,
+                    selectedCode);
                 _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
-                OpenBasicDeckSettingsButton_Click(sender, e);
+                ShowFloatingTip(
+                    InfoBarSeverity.Success,
+                    "牌堆已填入",
+                    $"{slot.DisplayTitle} <- {selectedCode}");
+            }
+            catch (Exception ex)
+            {
+                ShowFloatingTip(
+                    InfoBarSeverity.Error,
+                    "牌堆填入失败",
+                    ex.Message,
+                    $"牌堆填入失败：{ex}");
+            }
+        }
+
+        private static List<BasicDeckHandCardPickerItem> BuildBasicDeckPickerItems(
+            IReadOnlyList<HandCardInfo> handCards,
+            string defaultCardFacePath,
+            string selectedCode)
+        {
+            return handCards
+                .Select(card => new BasicDeckHandCardPickerItem(
+                    card,
+                    defaultCardFacePath,
+                    string.Equals(card.Code, selectedCode, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
+        private static string FindHandCardDisplayName(IReadOnlyList<HandCardInfo> handCards, string code)
+        {
+            var card = handCards.FirstOrDefault(candidate =>
+                string.Equals(candidate.Code, code, StringComparison.OrdinalIgnoreCase));
+            return card is null
+                ? code
+                : string.IsNullOrWhiteSpace(card.Name) ? card.Code : card.Name;
+        }
+
+        private Button CreateBasicDeckPickerButton(BasicDeckHandCardPickerItem item, Action select)
+        {
+            var button = new Button
+            {
+                Width = 136,
+                Height = 216,
+                Padding = new Thickness(6),
+                Style = GetAppResource<Style>("StandardPlayingCardButtonStyle")
+            };
+            ToolTipService.SetToolTip(button, item.DisplayName);
+            var grid = new Grid
+            {
+                Width = 122,
+                Height = 184,
+                RowSpacing = 6
+            };
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(154) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var face = new Border
+            {
+                Style = GetAppResource<Style>("StandardPlayingCardFrameStyle")
+            };
+            var media = new Border
+            {
+                Style = GetAppResource<Style>("StandardPlayingCardMediaStyle"),
+                Background = new ImageBrush
+                {
+                    Stretch = Stretch.UniformToFill,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center
+                }
+            };
+            face.Child = media;
+            _ = LoadImageBrushSourceAsync(media, item.CardFacePath);
+            Grid.SetRow(face, 0);
+            grid.Children.Add(face);
+
+            var title = new TextBlock
+            {
+                FontSize = 12,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = item.DisplayName,
+                TextAlignment = TextAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 112
+            };
+            Grid.SetRow(title, 1);
+            grid.Children.Add(title);
+
+            if (item.IsSelected)
+            {
+                button.BorderBrush = GetAppResource<Brush>("AccentTextFillColorPrimaryBrush");
+                button.BorderThickness = new Thickness(2);
+            }
+
+            button.Content = grid;
+            button.Click += (_, _) => select();
+            return button;
+        }
+
+        private static T? GetAppResource<T>(string key) where T : class
+        {
+            return Application.Current.Resources.TryGetValue(key, out var resource)
+                ? resource as T
+                : null;
+        }
+
+        private static async Task LoadImageBrushSourceAsync(Border target, string path)
+        {
+            if (target.Background is not ImageBrush imageBrush ||
+                string.IsNullOrWhiteSpace(path) ||
+                !File.Exists(path))
+            {
+                return;
+            }
+
+            try
+            {
+                var file = await StorageFile.GetFileFromPathAsync(path);
+                using var stream = await file.OpenReadAsync();
+                var bitmap = new BitmapImage();
+                await bitmap.SetSourceAsync(stream);
+                imageBrush.ImageSource = bitmap;
+            }
+            catch
+            {
             }
         }
 
@@ -457,7 +1130,10 @@ namespace FantasyTools
                 FlushHandCardDetailSave();
                 var handCard = _handCardWorkspaceService.GetHandCard(_viewModel.Settings.ProjectRootPath, code);
                 _returnToBasicDeckAfterHandCardDetail = returnToBasicDeck;
-                _viewModel.HandCardDetail.Load(handCard);
+                var basicDeckBinding = _handCardWorkspaceService.GetBasicDeckBindingForHandCard(
+                    _viewModel.Settings.ProjectRootPath,
+                    handCard.Code);
+                _viewModel.HandCardDetail.Load(handCard, basicDeckBinding);
                 _viewModel.HandCardDetail.ShowBasicDeckBreadcrumb = returnToBasicDeck;
                 _ = LoadHandCardFacePreviewAsync();
                 HandCardsPage.Visibility = Visibility.Collapsed;
@@ -898,11 +1574,7 @@ namespace FantasyTools
 
             try
             {
-                var saved = _handCardWorkspaceService.SaveHandCard(
-                    _viewModel.Settings.ProjectRootPath,
-                    _viewModel.HandCardDetail.BuildSnapshot());
-                _viewModel.HandCardDetail.ApplySavedHandCard(saved);
-                _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+                SaveHandCardDetailCore();
             }
             catch (Exception ex)
             {
@@ -942,20 +1614,16 @@ namespace FantasyTools
             }
         }
 
-        private async Task SaveHandCardDetailAsync(bool showErrorTip)
+        private Task SaveHandCardDetailAsync(bool showErrorTip)
         {
             if (!_viewModel.HandCardDetail.IsDirty)
             {
-                return;
+                return Task.CompletedTask;
             }
 
             try
             {
-                var saved = await Task.Run(() => _handCardWorkspaceService.SaveHandCard(
-                    _viewModel.Settings.ProjectRootPath,
-                    _viewModel.HandCardDetail.BuildSnapshot()));
-                _viewModel.HandCardDetail.ApplySavedHandCard(saved);
-                _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
+                SaveHandCardDetailCore();
             }
             catch (Exception ex)
             {
@@ -968,6 +1636,23 @@ namespace FantasyTools
                         $"手牌资料保存失败：{ex}");
                 }
             }
+
+            return Task.CompletedTask;
+        }
+
+        private void SaveHandCardDetailCore()
+        {
+            if (!_viewModel.HandCardDetail.IsDirty)
+            {
+                return;
+            }
+
+            var projectRootPath = _viewModel.Settings.ProjectRootPath;
+            var snapshotVersion = _viewModel.HandCardDetail.EditVersion;
+            var snapshot = _viewModel.HandCardDetail.BuildSnapshot();
+            var saved = _handCardWorkspaceService.SaveHandCard(projectRootPath, snapshot);
+            _viewModel.HandCardDetail.ApplySavedHandCard(saved, snapshotVersion);
+            _viewModel.HandCards.Load(_viewModel.Settings.ProjectRootPath);
         }
 
         private RoutedEventHandler CreateCardFacePickHandler(Action<string, System.Drawing.Rectangle?> updatePath)
@@ -1065,14 +1750,15 @@ namespace FantasyTools
         {
             try
             {
+                var sourceDisplayName = _viewModel.Settings.UpdateSourceDisplayName;
                 if (!isStartupCheck)
                 {
-                    ShowGlobalProgress("检查热更新", "正在请求 GitHub Release...");
-                    UpdateGlobalProgress("正在请求 GitHub Release...", 8, _viewModel.Settings.UpdateChannelText, true);
+                    ShowGlobalProgress("检查热更新", $"正在请求 {sourceDisplayName} Release...");
+                    UpdateGlobalProgress($"正在请求 {sourceDisplayName} Release...", 8, _viewModel.Settings.UpdateChannelText, true);
                 }
 
                 var result = await _updateService.CheckAsync(
-                    _viewModel.Settings.UpdateReleaseApiUrl,
+                    _viewModel.Settings.UpdateSource,
                     _viewModel.Settings.UpdateChannel,
                     _viewModel.Settings.UpdateConnectionTimeoutSecondsValue,
                     isStartupCheck ? CancellationToken.None : GetGlobalProgressCancellationToken());
@@ -1087,7 +1773,7 @@ namespace FantasyTools
                 {
                     if (showNoUpdateTip)
                     {
-                        ShowFloatingTip(InfoBarSeverity.Informational, "热更新检查完成", result.Message);
+                        ShowFloatingTip(InfoBarSeverity.Success, "热更新检查完成", result.Message);
                     }
 
                     return;
@@ -1108,13 +1794,13 @@ namespace FantasyTools
                 _viewModel.Settings.SetUpdateStatus(ex.Message);
                 if (!isStartupCheck)
                 {
-                    CompleteGlobalProgress("GitHub 连接超时", ex.Message);
+                    CompleteGlobalProgress($"{_viewModel.Settings.UpdateSourceDisplayName} 连接超时", ex.Message);
                     await HideGlobalProgressAfterDelayAsync();
                 }
 
                 ShowFloatingTip(
                     InfoBarSeverity.Warning,
-                    "GitHub 连接超时",
+                    $"{_viewModel.Settings.UpdateSourceDisplayName} 连接超时",
                     ex.Message,
                     $"热更新连接超时：{ex}");
             }
@@ -1130,30 +1816,31 @@ namespace FantasyTools
                 ShowFloatingTip(
                     InfoBarSeverity.Warning,
                     "热更新检查失败",
-                    "无法连接或读取 GitHub Release，可稍后重试。",
+                    ex.Message,
                     $"热更新检查失败：{ex}");
             }
         }
 
         private async Task TestUpdateConnectionAsync()
         {
-            ShowGlobalProgress("测试 GitHub 连接", "正在访问 GitHub Release...");
+            var sourceDisplayName = _viewModel.Settings.UpdateSourceDisplayName;
+            ShowGlobalProgress($"测试 {sourceDisplayName} 连接", $"正在访问 {sourceDisplayName} Release...");
             UpdateGlobalProgress(
-                "正在访问 GitHub Release...",
+                $"正在访问 {sourceDisplayName} Release...",
                 20,
                 $"最长 { _viewModel.Settings.UpdateConnectionTimeoutSecondsValue } 秒",
                 true);
             try
             {
                 var result = await _updateService.MeasureConnectionAsync(
-                    _viewModel.Settings.UpdateReleaseApiUrl,
+                    _viewModel.Settings.UpdateSource,
                     _viewModel.Settings.UpdateChannel,
                     _viewModel.Settings.UpdateConnectionTimeoutSecondsValue,
                     GetGlobalProgressCancellationToken());
                 var message = $"{result.Message}；耗时 {result.Elapsed.TotalSeconds:0.0} 秒。";
                 _viewModel.Settings.SetUpdateStatus(message);
-                CompleteGlobalProgress("GitHub 连接正常", message);
-                ShowFloatingTip(InfoBarSeverity.Success, "GitHub 连接正常", message);
+                CompleteGlobalProgress($"{sourceDisplayName} 连接正常", message);
+                ShowFloatingTip(InfoBarSeverity.Success, $"{sourceDisplayName} 连接正常", message);
                 await HideGlobalProgressAfterDelayAsync();
             }
             catch (OperationCanceledException)
@@ -1164,24 +1851,24 @@ namespace FantasyTools
             catch (TimeoutException ex)
             {
                 _viewModel.Settings.SetUpdateStatus(ex.Message);
-                CompleteGlobalProgress("GitHub 连接超时", ex.Message);
+                CompleteGlobalProgress($"{sourceDisplayName} 连接超时", ex.Message);
                 ShowFloatingTip(
                     InfoBarSeverity.Warning,
-                    "GitHub 连接超时",
+                    $"{sourceDisplayName} 连接超时",
                     ex.Message,
-                    $"GitHub 连接测速超时：{ex}");
+                    $"{sourceDisplayName} 连接测速超时：{ex}");
                 await HideGlobalProgressAfterDelayAsync();
             }
             catch (Exception ex)
             {
-                var message = $"GitHub 连接失败：{ex.Message}";
+                var message = $"{sourceDisplayName} 连接失败：{ex.Message}";
                 _viewModel.Settings.SetUpdateStatus(message);
-                CompleteGlobalProgress("GitHub 连接失败", ex.Message);
+                CompleteGlobalProgress($"{sourceDisplayName} 连接失败", ex.Message);
                 ShowFloatingTip(
                     InfoBarSeverity.Warning,
-                    "GitHub 连接失败",
-                    "无法连接 GitHub Release，可稍后重试。",
-                    $"GitHub 连接测速失败：{ex}");
+                    $"{sourceDisplayName} 连接失败",
+                    ex.Message,
+                    $"{sourceDisplayName} 连接测速失败：{ex}");
                 await HideGlobalProgressAfterDelayAsync();
             }
         }
@@ -1195,10 +1882,38 @@ namespace FantasyTools
                 Width = 460,
                 Spacing = 8
             };
-            body.Children.Add(new TextBlock { Text = $"当前版本：{result.CurrentVersion}" });
-            body.Children.Add(new TextBlock { Text = $"新版本：{result.LatestVersion}" });
-            body.Children.Add(new TextBlock { Text = $"更新通道：{manifest.Channel}" });
+            body.Children.Add(new TextBlock { Text = $"当前版本：{result.CurrentVersionText}" });
+            body.Children.Add(new TextBlock { Text = $"新版本：{result.LatestVersionText ?? manifest.Version}" });
+            body.Children.Add(new TextBlock { Text = $"更新通道：{GetUpdateChannelDisplayName(manifest.Channel)}" });
             body.Children.Add(new TextBlock { Text = $"更新包：{asset.FileName}" });
+            body.Children.Add(new TextBlock { Text = $"包大小：{UpdateService.FormatBytes(asset.SizeBytes)}" });
+            body.Children.Add(new TextBlock
+            {
+                Margin = new Thickness(0, 6, 0, 0),
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = "更新公告"
+            });
+            body.Children.Add(new Border
+            {
+                MaxHeight = 180,
+                Padding = new Thickness(12),
+                Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Child = new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    Content = new TextBlock
+                    {
+                        Text = string.IsNullOrWhiteSpace(result.ReleaseNotes)
+                            ? "本次 Release 没有填写更新公告。"
+                            : result.ReleaseNotes,
+                        TextWrapping = TextWrapping.Wrap
+                    }
+                }
+            });
             body.Children.Add(new TextBlock
             {
                 Text = "下载和校验会在工具箱内完成；之后会打开 PowerShell 替换程序文件，完成后按 Enter 打开新版本。",
@@ -1218,6 +1933,13 @@ namespace FantasyTools
             await DownloadAndLaunchUpdaterAsync(manifest, asset);
         }
 
+        private static string GetUpdateChannelDisplayName(string channel)
+        {
+            return string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
+                ? "测试版"
+                : "正式版";
+        }
+
         private async Task DownloadAndLaunchUpdaterAsync(UpdateManifest manifest, UpdateAssetManifest asset)
         {
             ShowGlobalProgress("下载热更新", asset.FileName);
@@ -1234,8 +1956,12 @@ namespace FantasyTools
                     GetGlobalProgressCancellationToken());
                 CompleteGlobalProgress("更新包已校验", "正在打开 PowerShell updater。");
                 _viewModel.Settings.SetUpdateStatus($"更新包已下载：{manifest.Version}");
-                _updateService.LaunchUpdater(download.PackagePath, manifest, asset);
-                await Task.Delay(600);
+                await _updateService.LaunchUpdaterAsync(
+                    download.PackagePath,
+                    manifest,
+                    asset,
+                    progress,
+                    GetGlobalProgressCancellationToken());
                 Application.Current.Exit();
             }
             catch (OperationCanceledException)
@@ -1259,6 +1985,11 @@ namespace FantasyTools
 
         private void ShowPage(ToolboxModuleKey key)
         {
+            if (_activeExportSelectionKind is not null)
+            {
+                EndExportSelection();
+            }
+
             FlushCharacterDetailSave();
             FlushHandCardDetailSave();
             CharacterDetailPage.Visibility = Visibility.Collapsed;
@@ -1395,6 +2126,7 @@ namespace FantasyTools
                 ThemePreference.System => ElementTheme.Default,
                 _ => ElementTheme.Light
             };
+            _viewModel.HandCards.RefreshCardVisuals();
         }
 
         private void SyncThemePreferenceComboBox()
@@ -1412,12 +2144,44 @@ namespace FantasyTools
             UpdateChannelComboBox.SelectedIndex = _viewModel.Settings.UpdateChannel == UpdateChannel.Beta ? 1 : 0;
         }
 
+        private void SyncUpdateSourceComboBox()
+        {
+            UpdateSourceComboBox.SelectedIndex = _viewModel.Settings.UpdateSource switch
+            {
+                UpdateSource.Gitee => 1,
+                _ => 0
+            };
+        }
+
         private void ApplyWindowIcon()
         {
             var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
             if (File.Exists(iconPath))
             {
                 AppWindow.SetIcon(iconPath);
+                ApplyWin32WindowIcon(iconPath);
+            }
+        }
+
+        private void ApplyWin32WindowIcon(string iconPath)
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            if (hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            var largeIcon = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 32, 32, LoadFromFile);
+            var smallIcon = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 16, 16, LoadFromFile);
+            if (largeIcon != IntPtr.Zero)
+            {
+                SendMessage(hwnd, WindowMessageSetIcon, IconBig, largeIcon);
+            }
+
+            if (smallIcon != IntPtr.Zero)
+            {
+                SendMessage(hwnd, WindowMessageSetIcon, IconSmall, smallIcon);
+                SendMessage(hwnd, WindowMessageSetIcon, IconSmall2, smallIcon);
             }
         }
 
@@ -1437,5 +2201,28 @@ namespace FantasyTools
                 presenter.Maximize();
             }
         }
+
+        private const uint WindowMessageSetIcon = 0x0080;
+        private const nuint IconSmall = 0;
+        private const nuint IconBig = 1;
+        private const nuint IconSmall2 = 2;
+        private const uint ImageIcon = 1;
+        private const uint LoadFromFile = 0x00000010;
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr LoadImage(
+            IntPtr hinst,
+            string lpszName,
+            uint uType,
+            int cxDesired,
+            int cyDesired,
+            uint fuLoad);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SendMessage(
+            IntPtr hWnd,
+            uint msg,
+            nuint wParam,
+            IntPtr lParam);
     }
 }
