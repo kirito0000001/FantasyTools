@@ -210,7 +210,7 @@ internal sealed class HandCardCreateDialogContent
 
     private void UpdatePreview()
     {
-        _slotPreviewText.Text = $"基础卡堆槽位：{SuitDeckSlotViewModel.FormatSuitNumber(_defaultSuit, _defaultPokerNumber)}";
+        _slotPreviewText.Text = $"牌堆槽位：{SuitDeckSlotViewModel.FormatSuitNumber(_defaultSuit, _defaultPokerNumber)}";
         _folderPreviewText.Text = $"创建后文件夹预览：{_handCardWorkspaceService.BuildHandCardFolderPreview(_projectRootPath, _codeBox.Text)}";
     }
 }

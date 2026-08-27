@@ -16,6 +16,7 @@ namespace FantasyTools
 
         private void ShowFloatingTip(InfoBarSeverity severity, string title, string message, string? logText = null)
         {
+            severity = NormalizeFloatingTipSeverity(severity);
             var textForLog = string.IsNullOrWhiteSpace(logText)
                 ? $"{title}：{message}"
                 : logText;
@@ -118,12 +119,20 @@ namespace FantasyTools
 
         private static TimeSpan GetFloatingTipDuration(InfoBarSeverity severity)
         {
+            severity = NormalizeFloatingTipSeverity(severity);
             return severity switch
             {
                 InfoBarSeverity.Error => TimeSpan.FromSeconds(5),
                 InfoBarSeverity.Warning => TimeSpan.FromSeconds(3.2),
                 _ => TimeSpan.FromSeconds(2.6)
             };
+        }
+
+        private static InfoBarSeverity NormalizeFloatingTipSeverity(InfoBarSeverity severity)
+        {
+            return severity == InfoBarSeverity.Informational
+                ? InfoBarSeverity.Success
+                : severity;
         }
 
         private static void CopyTextToClipboard(string text)

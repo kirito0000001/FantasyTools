@@ -17,6 +17,16 @@
             <SolidColorBrush x:Key="SuitDeckMissingBorderBrush" Color="#C87900" />
             <SolidColorBrush x:Key="SuitDeckMissingAccentBrush" Color="#C87900" />
             <SolidColorBrush x:Key="SuitDeckMissingTextBrush" Color="#6B3D00" />
+            <SolidColorBrush x:Key="HandCardSuitTextStrokeBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="HandCardAddBackgroundBrush" Color="#F1F1F1" />
+            <SolidColorBrush x:Key="HandCardHeartsBackgroundBrush" Color="#FFE0E5" />
+            <SolidColorBrush x:Key="HandCardDiamondsBackgroundBrush" Color="#FFE6C2" />
+            <SolidColorBrush x:Key="HandCardClubsBackgroundBrush" Color="#D3F4EF" />
+            <SolidColorBrush x:Key="HandCardSpadesBackgroundBrush" Color="#D8E9FF" />
+            <SolidColorBrush x:Key="HandCardHeartsTextBrush" Color="#B20F2A" />
+            <SolidColorBrush x:Key="HandCardDiamondsTextBrush" Color="#B85A00" />
+            <SolidColorBrush x:Key="HandCardClubsTextBrush" Color="#006F67" />
+            <SolidColorBrush x:Key="HandCardSpadesTextBrush" Color="#124CA6" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="GlobalProgressHostBackgroundBrush" Color="#F0000000" />
@@ -31,6 +41,16 @@
             <SolidColorBrush x:Key="SuitDeckMissingBorderBrush" Color="#E1A33A" />
             <SolidColorBrush x:Key="SuitDeckMissingAccentBrush" Color="#B97716" />
             <SolidColorBrush x:Key="SuitDeckMissingTextBrush" Color="#FFD89A" />
+            <SolidColorBrush x:Key="HandCardSuitTextStrokeBrush" Color="#1A1A1A" />
+            <SolidColorBrush x:Key="HandCardAddBackgroundBrush" Color="#3A3838" />
+            <SolidColorBrush x:Key="HandCardHeartsBackgroundBrush" Color="#4B1821" />
+            <SolidColorBrush x:Key="HandCardDiamondsBackgroundBrush" Color="#4A2E11" />
+            <SolidColorBrush x:Key="HandCardClubsBackgroundBrush" Color="#113F3B" />
+            <SolidColorBrush x:Key="HandCardSpadesBackgroundBrush" Color="#143762" />
+            <SolidColorBrush x:Key="HandCardHeartsTextBrush" Color="#FF5E78" />
+            <SolidColorBrush x:Key="HandCardDiamondsTextBrush" Color="#FF9D3D" />
+            <SolidColorBrush x:Key="HandCardClubsTextBrush" Color="#27CABD" />
+            <SolidColorBrush x:Key="HandCardSpadesTextBrush" Color="#66AAFF" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -126,12 +146,14 @@
     </Style>
 
     <Style x:Key="StandardPlayingCardButtonStyle" TargetType="Button">
-        <Setter Property="Width" Value="122" />
-        <Setter Property="Height" Value="184" />
+        <Setter Property="Width" Value="146.4" />
+        <Setter Property="Height" Value="220.8" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+        <Setter Property="BackgroundSizing" Value="OuterBorderEdge" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Top" />
         <Setter Property="HorizontalAlignment" Value="Center" />
@@ -140,8 +162,8 @@
     </Style>
 
     <Style x:Key="StandardPlayingCardFrameStyle" TargetType="Border" BasedOn="{StaticResource PanelBorderStyle}">
-        <Setter Property="Width" Value="110" />
-        <Setter Property="Height" Value="154.5" />
+        <Setter Property="Width" Value="132" />
+        <Setter Property="Height" Value="185.4" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Background" Value="Transparent" />
@@ -149,8 +171,8 @@
     </Style>
 
     <Style x:Key="StandardPlayingCardMediaStyle" TargetType="Border">
-        <Setter Property="Width" Value="110" />
-        <Setter Property="Height" Value="154.5" />
+        <Setter Property="Width" Value="132" />
+        <Setter Property="Height" Value="185.4" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Background" Value="{ThemeResource LayerFillColorAltBrush}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -165,7 +187,7 @@
     </Style>
 
     <Style TargetType="Expander">
-        <Setter Property="IsExpanded" Value="False" />
+        <Setter Property="IsExpanded" Value="True" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>

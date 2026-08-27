@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="using:FantasyTools.Views"
     Title="幻杀工具箱"
     mc:Ignorable="d">
 
@@ -43,7 +44,7 @@
                         FontWeight="SemiBold"
                         Text="幻杀工具箱"
                         TextTrimming="CharacterEllipsis" />
-                    <TextBlock Style="{StaticResource SubtleTextStyle}" Text="1.0.0" />
+                    <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding AppVersionText, Mode=OneWay}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -109,7 +110,7 @@
                 </Grid.RowDefinitions>
 
                 <ScrollViewer x:Name="CharactersPage" VerticalScrollBarVisibility="Auto">
-                    <Grid MaxWidth="1480" HorizontalAlignment="Stretch" RowSpacing="16">
+                    <Grid HorizontalAlignment="Stretch" RowSpacing="16">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -127,24 +128,108 @@
                             IsClosable="False"
                             IsOpen="True"
                             Message="当前阶段已固定角色主入口、工具栏和对象卡片样式；角色数据模型会在后续特化规范接入。"
-                            Severity="Informational"
+                            Severity="Warning"
                             Title="角色工作区待接入" />
 
-                        <Border Grid.Row="2" Style="{StaticResource ToolbarBorderStyle}">
+                        <Border x:Name="CharactersToolbar" Grid.Row="2" Style="{StaticResource ToolbarBorderStyle}">
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="320" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox PlaceholderText="搜索角色 / 武将 / 代号" />
-                                <Button Grid.Column="1" Style="{StaticResource IconToolButtonStyle}" ToolTipService.ToolTip="筛选">
+                                <TextBox
+                                    PlaceholderText="搜索角色 / 武将 / 代号 / Tag / 技能"
+                                    Text="{Binding Characters.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button
+                                    Grid.Column="1"
+                                    Click="OpenCharacterFilterButton_Click"
+                                    Style="{StaticResource IconToolButtonStyle}"
+                                    ToolTipService.ToolTip="筛选">
                                     <SymbolIcon Symbol="Filter" />
                                 </Button>
-                                <Button Grid.Column="2" Style="{StaticResource IconToolButtonStyle}" ToolTipService.ToolTip="排序">
+                                <Button
+                                    Grid.Column="2"
+                                    Click="OpenCharacterSortButton_Click"
+                                    Style="{StaticResource IconToolButtonStyle}"
+                                    ToolTipService.ToolTip="{Binding Characters.SortSummary, Mode=OneWay}">
                                     <SymbolIcon Symbol="Sort" />
                                 </Button>
+                                <Button
+                                    Grid.Column="3"
+                                    Style="{StaticResource PrimaryToolButtonStyle}"
+                                    ToolTipService.ToolTip="角色导入与导出">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <SymbolIcon Symbol="Share" />
+                                        <TextBlock Text="导入/导出" />
+                                    </StackPanel>
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="导入角色包" Click="ImportCharacterPackagesButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="Download" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="导出角色" Click="ExportCharactersButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="Upload" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="打开角色导出目录" Click="OpenCharacterExportFolderButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="OpenFile" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                                <TextBlock
+                                    Grid.Column="4"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SubtleTextStyle}"
+                                    Text="{Binding Characters.FilterSummary, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            x:Name="CharacterExportSelectionToolbar"
+                            Grid.Row="2"
+                            Style="{StaticResource ToolbarBorderStyle}"
+                            Visibility="Collapsed">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox
+                                    x:Name="CharacterExportSelectAllCheckBox"
+                                    Click="CharacterExportSelectAllCheckBox_Click"
+                                    Content="全选"
+                                    IsThreeState="True"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="CharacterExportSelectedCountText"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SubtleTextStyle}"
+                                    Text="已选 0 / 0" />
+                                <Button
+                                    x:Name="ConfirmCharacterExportSelectionButton"
+                                    Grid.Column="3"
+                                    Click="ConfirmCharacterExportSelectionButton_Click"
+                                    IsEnabled="False"
+                                    Style="{StaticResource PrimaryToolButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <SymbolIcon Symbol="Upload" />
+                                        <TextBlock Text="导出所选" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    Grid.Column="4"
+                                    Click="CancelCharacterExportSelectionButton_Click"
+                                    Content="取消"
+                                    Style="{StaticResource PrimaryToolButtonStyle}" />
                             </Grid>
                         </Border>
 
@@ -156,14 +241,15 @@
                                 <ItemsPanelTemplate>
                                     <ItemsWrapGrid
                                         HorizontalAlignment="Stretch"
-                                        ItemHeight="202"
-                                        ItemWidth="138"
-                                        MaximumRowsOrColumns="10"
+                                        ItemHeight="242.4"
+                                        ItemWidth="165.6"
+                                        MaximumRowsOrColumns="8"
                                         Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
+                                    <Grid Width="146.4" Height="220.8">
                                     <Button
                                         AutomationProperties.HelpText="按 Enter 打开角色卡，按 Shift+F10 打开菜单，按 Delete 打开删除确认。"
                                         AutomationProperties.Name="{Binding AutomationName, Mode=OneWay}"
@@ -175,11 +261,11 @@
                                         ToolTipService.ToolTip="{Binding AutomationName, Mode=OneWay}">
                                         <Grid
                                             VerticalAlignment="Top"
-                                            Width="122"
-                                            Height="184">
+                                            Width="146.4"
+                                            Height="220.8">
                                             <Grid.RowDefinitions>
-                                                <RowDefinition Height="6" />
-                                                <RowDefinition Height="154.5" />
+                                                <RowDefinition Height="7.2" />
+                                                <RowDefinition Height="185.4" />
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
                                             <Border Grid.Row="1" Style="{StaticResource StandardPlayingCardFrameStyle}">
@@ -218,13 +304,25 @@
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
                                                 LineHeight="16"
-                                                MaxWidth="110"
+                                                MaxWidth="132"
                                                 Text="{Binding DisplayName, Mode=OneWay}"
                                                 TextAlignment="Center"
                                                 TextTrimming="CharacterEllipsis"
                                                 Visibility="{Binding IsAddCard, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}" />
                                         </Grid>
                                     </Button>
+                                    <CheckBox
+                                        Margin="0,14,14,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Canvas.ZIndex="2"
+                                        AutomationProperties.Name="选择导出此角色"
+                                        Checked="ExportCardCheckBox_Changed"
+                                        IsChecked="{Binding IsExportSelected, Mode=TwoWay}"
+                                        UseSystemFocusVisuals="False"
+                                        Unchecked="ExportCardCheckBox_Changed"
+                                        Visibility="{Binding IsExportSelectionVisible, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -240,7 +338,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid MaxWidth="1480" HorizontalAlignment="Stretch" ColumnSpacing="12">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="40" />
                             <ColumnDefinition Width="*" />
@@ -271,7 +369,7 @@
                     <ScrollViewer
                         Grid.Row="1"
                         VerticalScrollBarVisibility="Auto">
-                        <Grid MaxWidth="1480" HorizontalAlignment="Stretch" RowSpacing="16">
+                        <Grid HorizontalAlignment="Stretch" RowSpacing="16">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -292,7 +390,7 @@
                             IsClosable="False"
                             IsOpen="{Binding CharacterDetail.IsNoticeOpen, Mode=OneWay}"
                             Message="{Binding CharacterDetail.NoticeMessage, Mode=OneWay}"
-                            Severity="Informational"
+                            Severity="Warning"
                             Title="{Binding CharacterDetail.NoticeTitle, Mode=OneWay}" />
 
                         <Grid Grid.Row="2" ColumnSpacing="16">
@@ -351,7 +449,7 @@
                                                 ValueChanged="CharacterDetailNumberBox_ValueChanged" />
                                             <NumberBox
                                                 Grid.Column="1"
-                                                Header="阶段"
+                                                Header="Stage（形态阶段）"
                                                 AcceptsExpression="False"
                                                 Minimum="1"
                                                 SmallChange="1"
@@ -606,7 +704,7 @@
                     x:Name="HandCardsPage"
                     Visibility="Collapsed"
                     VerticalScrollBarVisibility="Auto">
-                    <Grid MaxWidth="1480" HorizontalAlignment="Stretch" RowSpacing="16">
+                    <Grid HorizontalAlignment="Stretch" RowSpacing="16">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -623,36 +721,123 @@
                             Grid.Row="1"
                             IsClosable="False"
                             IsOpen="True"
-                            Message="手牌数据保存在整体项目目录的 HandCards/手牌英文代号/ 下；点击卡片进入手牌资料页，修改会自动保存。"
-                            Severity="Informational"
-                            Title="手牌工作区" />
+                            Message="{Binding HandCards.HandCardsNoticeMessage, Mode=OneWay}"
+                            Severity="{Binding HandCards.HandCardsNoticeSeverity, Mode=OneWay}"
+                            Title="{Binding HandCards.HandCardsNoticeTitle, Mode=OneWay}" />
 
-                        <Border Grid.Row="2" Style="{StaticResource ToolbarBorderStyle}">
+                        <Border x:Name="HandCardsToolbar" Grid.Row="2" Style="{StaticResource ToolbarBorderStyle}">
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="320" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox PlaceholderText="搜索手牌 / 类型 / 代号" />
-                                <Button Grid.Column="1" Style="{StaticResource IconToolButtonStyle}" ToolTipService.ToolTip="筛选">
+                                <TextBox
+                                    PlaceholderText="搜索手牌 / 代号"
+                                    Text="{Binding HandCards.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button
+                                    Grid.Column="1"
+                                    Click="OpenHandCardFilterButton_Click"
+                                    Style="{StaticResource IconToolButtonStyle}"
+                                    ToolTipService.ToolTip="筛选">
                                     <SymbolIcon Symbol="Filter" />
                                 </Button>
-                                <Button Grid.Column="2" Style="{StaticResource IconToolButtonStyle}" ToolTipService.ToolTip="排序">
+                                <Button
+                                    Grid.Column="2"
+                                    Click="OpenHandCardSortButton_Click"
+                                    Style="{StaticResource IconToolButtonStyle}"
+                                    ToolTipService.ToolTip="{Binding HandCards.SortSummary, Mode=OneWay}">
                                     <SymbolIcon Symbol="Sort" />
                                 </Button>
                                 <Button
                                     Grid.Column="3"
                                     Click="OpenBasicDeckSettingsButton_Click"
                                     Style="{StaticResource PrimaryToolButtonStyle}"
-                                    ToolTipService.ToolTip="打开基础卡堆设置">
+                                    ToolTipService.ToolTip="打开牌堆设置">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <SymbolIcon Symbol="AllApps" />
-                                        <TextBlock Text="基础卡堆设置" />
+                                        <TextBlock Text="牌堆设置" />
                                     </StackPanel>
                                 </Button>
+                                <Button
+                                    Grid.Column="4"
+                                    Style="{StaticResource PrimaryToolButtonStyle}"
+                                    ToolTipService.ToolTip="手牌导入与导出">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <SymbolIcon Symbol="Share" />
+                                        <TextBlock Text="导入/导出" />
+                                    </StackPanel>
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="导入手牌包" Click="ImportHandCardPackagesButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="Download" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="从其他项目导入手牌" Click="ImportHandCardsFromProjectButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="Folder" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="导出手牌" Click="ExportHandCardsButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="Upload" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="打开手牌导出目录" Click="OpenHandCardExportFolderButton_Click">
+                                                <MenuFlyoutItem.Icon><SymbolIcon Symbol="OpenFile" /></MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                                <TextBlock
+                                    Grid.Column="5"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SubtleTextStyle}"
+                                    Text="{Binding HandCards.FilterSummary, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            x:Name="HandCardExportSelectionToolbar"
+                            Grid.Row="2"
+                            Style="{StaticResource ToolbarBorderStyle}"
+                            Visibility="Collapsed">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox
+                                    x:Name="HandCardExportSelectAllCheckBox"
+                                    Click="HandCardExportSelectAllCheckBox_Click"
+                                    Content="全选"
+                                    IsThreeState="True"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="HandCardExportSelectedCountText"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SubtleTextStyle}"
+                                    Text="已选 0 / 0" />
+                                <Button
+                                    x:Name="ConfirmHandCardExportSelectionButton"
+                                    Grid.Column="3"
+                                    Click="ConfirmHandCardExportSelectionButton_Click"
+                                    IsEnabled="False"
+                                    Style="{StaticResource PrimaryToolButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <SymbolIcon Symbol="Upload" />
+                                        <TextBlock Text="导出所选" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    Grid.Column="4"
+                                    Click="CancelHandCardExportSelectionButton_Click"
+                                    Content="取消"
+                                    Style="{StaticResource PrimaryToolButtonStyle}" />
                             </Grid>
                         </Border>
 
@@ -664,14 +849,15 @@
                                 <ItemsPanelTemplate>
                                     <ItemsWrapGrid
                                         HorizontalAlignment="Stretch"
-                                        ItemHeight="202"
-                                        ItemWidth="138"
-                                        MaximumRowsOrColumns="10"
+                                        ItemHeight="242.4"
+                                        ItemWidth="165.6"
+                                        MaximumRowsOrColumns="8"
                                         Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
+                                    <Grid Width="146.4" Height="220.8">
                                     <Button
                                         AutomationProperties.HelpText="按 Enter 打开手牌卡。"
                                         AutomationProperties.Name="{Binding AutomationName, Mode=OneWay}"
@@ -681,25 +867,72 @@
                                         KeyDown="HandCard_KeyDown"
                                         Style="{StaticResource StandardPlayingCardButtonStyle}"
                                         ToolTipService.ToolTip="{Binding AutomationName, Mode=OneWay}">
+                                        <Button.Background>
+                                            <Binding Converter="{StaticResource HandCardSuitBrushConverter}" ConverterParameter="Background" Mode="OneWay" />
+                                        </Button.Background>
                                         <Grid
                                             VerticalAlignment="Top"
-                                            Width="122"
-                                            Height="184">
+                                            Width="146.4"
+                                            Height="220.8">
                                             <Grid.RowDefinitions>
-                                                <RowDefinition Height="6" />
-                                                <RowDefinition Height="154.5" />
+                                                <RowDefinition Height="7.2" />
+                                                <RowDefinition Height="185.4" />
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
                                             <Border Grid.Row="1" Style="{StaticResource StandardPlayingCardFrameStyle}">
                                                 <Border Style="{StaticResource StandardPlayingCardMediaStyle}">
-                                                    <Border.Background>
-                                                        <ImageBrush
-                                                            AlignmentX="Center"
-                                                            AlignmentY="Center"
-                                                            ImageSource="{Binding CardFacePath, Converter={StaticResource FileImageSourceConverter}, Mode=OneWay}"
-                                                            Stretch="UniformToFill" />
-                                                    </Border.Background>
                                                     <Grid>
+                                                        <Border
+                                                            Background="{Binding Converter={StaticResource HandCardSuitBrushConverter}, ConverterParameter=Background, Mode=OneWay}"
+                                                            CornerRadius="8" />
+                                                        <Border
+                                                            CornerRadius="8">
+                                                            <Border.Background>
+                                                                <ImageBrush
+                                                                    AlignmentX="Center"
+                                                                    AlignmentY="Center"
+                                                                    ImageSource="{Binding CardFacePath, Converter={StaticResource FileImageSourceConverter}, Mode=OneWay}"
+                                                                    Stretch="UniformToFill" />
+                                                            </Border.Background>
+                                                        </Border>
+                                                        <StackPanel
+                                                            Margin="7,5,0,0"
+                                                            HorizontalAlignment="Left"
+                                                            VerticalAlignment="Top"
+                                                            Spacing="-2"
+                                                            Visibility="{Binding IsAddCard, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}">
+                                                            <views:OutlinedTextBlock
+                                                                FontSize="15"
+                                                                Foreground="{Binding Converter={StaticResource HandCardSuitBrushConverter}, ConverterParameter=Text, Mode=OneWay}"
+                                                                Stroke="{ThemeResource HandCardSuitTextStrokeBrush}"
+                                                                Text="{Binding PokerNumberLabel, Mode=OneWay}" />
+                                                            <views:OutlinedTextBlock
+                                                                FontSize="15"
+                                                                Foreground="{Binding Converter={StaticResource HandCardSuitBrushConverter}, ConverterParameter=Text, Mode=OneWay}"
+                                                                Stroke="{ThemeResource HandCardSuitTextStrokeBrush}"
+                                                                Text="{Binding SuitSymbol, Mode=OneWay}" />
+                                                        </StackPanel>
+                                                        <StackPanel
+                                                            Margin="0,0,7,5"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Bottom"
+                                                            RenderTransformOrigin="0.5,0.5"
+                                                            Spacing="-2"
+                                                            Visibility="{Binding IsAddCard, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}">
+                                                            <StackPanel.RenderTransform>
+                                                                <RotateTransform Angle="180" />
+                                                            </StackPanel.RenderTransform>
+                                                            <views:OutlinedTextBlock
+                                                                FontSize="15"
+                                                                Foreground="{Binding Converter={StaticResource HandCardSuitBrushConverter}, ConverterParameter=Text, Mode=OneWay}"
+                                                                Stroke="{ThemeResource HandCardSuitTextStrokeBrush}"
+                                                                Text="{Binding PokerNumberLabel, Mode=OneWay}" />
+                                                            <views:OutlinedTextBlock
+                                                                FontSize="15"
+                                                                Foreground="{Binding Converter={StaticResource HandCardSuitBrushConverter}, ConverterParameter=Text, Mode=OneWay}"
+                                                                Stroke="{ThemeResource HandCardSuitTextStrokeBrush}"
+                                                                Text="{Binding SuitSymbol, Mode=OneWay}" />
+                                                        </StackPanel>
                                                         <Border
                                                             Width="32"
                                                             Height="32"
@@ -726,13 +959,25 @@
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
                                                 LineHeight="16"
-                                                MaxWidth="110"
+                                                MaxWidth="132"
                                                 Text="{Binding DisplayName, Mode=OneWay}"
                                                 TextAlignment="Center"
                                                 TextTrimming="CharacterEllipsis"
                                                 Visibility="{Binding IsAddCard, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}" />
                                         </Grid>
                                     </Button>
+                                    <CheckBox
+                                        Margin="0,14,14,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Canvas.ZIndex="2"
+                                        AutomationProperties.Name="选择导出此手牌"
+                                        Checked="ExportCardCheckBox_Changed"
+                                        IsChecked="{Binding IsExportSelected, Mode=TwoWay}"
+                                        UseSystemFocusVisuals="False"
+                                        Unchecked="ExportCardCheckBox_Changed"
+                                        Visibility="{Binding IsExportSelectionVisible, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -748,7 +993,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid MaxWidth="1480" HorizontalAlignment="Stretch" ColumnSpacing="12">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="40" />
                             <ColumnDefinition Width="*" />
@@ -776,7 +1021,7 @@
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Symbol="Forward" />
                                 <Button
-                                    Content="基础卡堆设置"
+                                    Content="牌堆设置"
                                     Style="{StaticResource SecondaryBreadcrumbButtonStyle}"
                                     ToolTipService.ToolTip="当前页面" />
                             </StackPanel>
@@ -784,111 +1029,130 @@
                     </Grid>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <Grid MaxWidth="1480" HorizontalAlignment="Stretch" RowSpacing="16">
+                        <Grid HorizontalAlignment="Stretch" RowSpacing="16">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <StackPanel Spacing="4">
-                                <TextBlock Style="{StaticResource PageTitleStyle}" Text="基础卡堆设置" />
+                            <StackPanel Spacing="10">
+                                <TextBlock Style="{StaticResource PageTitleStyle}" Text="牌堆设置" />
                                 <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding HandCards.SuitDeckSummary, Mode=OneWay}" />
+                                <ComboBox
+                                    Width="220"
+                                    HorizontalAlignment="Left"
+                                    DisplayMemberPath="DisplayName"
+                                    ItemsSource="{Binding HandCards.SuitDeckGroups, Mode=OneWay}"
+                                    SelectedItem="{Binding HandCards.SelectedSuitDeckGroup, Mode=TwoWay}" />
                             </StackPanel>
 
-                            <ItemsControl Grid.Row="1" ItemsSource="{Binding HandCards.SuitDeckSlots, Mode=OneWay}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <ItemsWrapGrid
-                                            HorizontalAlignment="Stretch"
-                                            ItemHeight="134"
-                                            ItemWidth="350"
-                                            MaximumRowsOrColumns="4"
-                                            Orientation="Horizontal" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding HandCards.SelectedSuitDeckGroup.SuitGroups, Mode=OneWay}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border
-                                            Width="332"
-                                            Height="118"
-                                            Padding="0"
-                                            BorderBrush="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=Border, Mode=OneWay}"
-                                            BorderThickness="1"
-                                            Background="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=Background, Mode=OneWay}"
-                                            CornerRadius="8">
-                                            <Grid ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="82" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
+                                        <StackPanel Margin="0,0,0,14" Spacing="8">
+                                            <TextBlock
+                                                FontSize="16"
+                                                FontWeight="SemiBold"
+                                                Text="{Binding DisplayName, Mode=OneWay}" />
+                                            <ItemsControl ItemsSource="{Binding Slots, Mode=OneWay}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <ItemsWrapGrid
+                                                            HorizontalAlignment="Stretch"
+                                                            ItemHeight="134"
+                                                            ItemWidth="350"
+                                                            MaximumRowsOrColumns="4"
+                                                            Orientation="Horizontal" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border
+                                                            Width="332"
+                                                            Height="118"
+                                                            Padding="0"
+                                                            BorderBrush="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=Border, Mode=OneWay}"
+                                                            BorderThickness="1"
+                                                            Background="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=Background, Mode=OneWay}"
+                                                            CornerRadius="8">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="82" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
 
-                                                <Grid
-                                                    Padding="12"
-                                                    Background="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=Accent, Mode=OneWay}">
-                                                    <StackPanel VerticalAlignment="Center" Spacing="4">
-                                                        <TextBlock
-                                                            FontSize="13"
-                                                            Foreground="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=AccentText, Mode=OneWay}"
-                                                            Text="{Binding SuitDisplayName, Mode=OneWay}"
-                                                            TextAlignment="Center" />
-                                                        <TextBlock
-                                                            FontSize="28"
-                                                            FontWeight="SemiBold"
-                                                            Foreground="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=AccentText, Mode=OneWay}"
-                                                            Text="{Binding NumberLabel, Mode=OneWay}"
-                                                            TextAlignment="Center" />
-                                                    </StackPanel>
-                                                </Grid>
+                                                                <Grid
+                                                                    Padding="12"
+                                                                    Background="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=Accent, Mode=OneWay}">
+                                                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                                                        <TextBlock
+                                                                            FontSize="13"
+                                                                            Foreground="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=AccentText, Mode=OneWay}"
+                                                                            Text="{Binding SuitDisplayName, Mode=OneWay}"
+                                                                            TextAlignment="Center" />
+                                                                        <TextBlock
+                                                                            FontSize="28"
+                                                                            FontWeight="SemiBold"
+                                                                            Foreground="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=AccentText, Mode=OneWay}"
+                                                                            Text="{Binding NumberLabel, Mode=OneWay}"
+                                                                            TextAlignment="Center" />
+                                                                    </StackPanel>
+                                                                </Grid>
 
-                                                <StackPanel
-                                                    Grid.Column="1"
-                                                    MinWidth="0"
-                                                    Padding="0,12,0,12"
-                                                    VerticalAlignment="Stretch"
-                                                    Spacing="5">
-                                                    <TextBlock
-                                                        FontSize="15"
-                                                        FontWeight="SemiBold"
-                                                        Text="{Binding BindingTitle, Mode=OneWay}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="{Binding BindingSubtitle, Mode=OneWay}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                    <Border
-                                                        HorizontalAlignment="Left"
-                                                        Padding="8,3"
-                                                        Background="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=BadgeBackground, Mode=OneWay}"
-                                                        BorderBrush="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=BadgeBorder, Mode=OneWay}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4">
-                                                        <TextBlock
-                                                            FontSize="12"
-                                                            Foreground="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=BadgeText, Mode=OneWay}"
-                                                            Text="{Binding StatusText, Mode=OneWay}" />
-                                                    </Border>
-                                                </StackPanel>
+                                                                <StackPanel
+                                                                    Grid.Column="1"
+                                                                    MinWidth="0"
+                                                                    Padding="0,12,0,12"
+                                                                    VerticalAlignment="Stretch"
+                                                                    Spacing="5">
+                                                                    <TextBlock
+                                                                        FontSize="15"
+                                                                        FontWeight="SemiBold"
+                                                                        Text="{Binding BindingTitle, Mode=OneWay}"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock
+                                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                        Text="{Binding BindingSubtitle, Mode=OneWay}"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                    <Border
+                                                                        HorizontalAlignment="Left"
+                                                                        Padding="8,3"
+                                                                        Background="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=BadgeBackground, Mode=OneWay}"
+                                                                        BorderBrush="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=BadgeBorder, Mode=OneWay}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="4">
+                                                                        <TextBlock
+                                                                            FontSize="12"
+                                                                            Foreground="{Binding IsFilled, Converter={StaticResource SuitDeckSlotBrushConverter}, ConverterParameter=BadgeText, Mode=OneWay}"
+                                                                            Text="{Binding StatusText, Mode=OneWay}" />
+                                                                    </Border>
+                                                                </StackPanel>
 
-                                                <Grid
-                                                    Grid.Column="2"
-                                                    Padding="0,0,12,0"
-                                                    VerticalAlignment="Center">
-                                                    <Button
-                                                        Click="BasicDeckSlotButton_Click"
-                                                        CommandParameter="{Binding}"
-                                                        Content="{Binding SlotActionText, Mode=OneWay}"
-                                                        Style="{StaticResource PrimaryToolButtonStyle}"
-                                                        Visibility="{Binding IsFilled, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
-                                                    <Button
-                                                        Click="BasicDeckSlotButton_Click"
-                                                        CommandParameter="{Binding}"
-                                                        Content="{Binding SlotActionText, Mode=OneWay}"
-                                                        Style="{StaticResource PrimaryToolButtonStyle}"
-                                                        Visibility="{Binding IsFilled, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}" />
-                                                </Grid>
-                                            </Grid>
-                                        </Border>
+                                                                <Grid
+                                                                    Grid.Column="2"
+                                                                    Padding="0,0,12,0"
+                                                                    VerticalAlignment="Center">
+                                                                    <StackPanel Spacing="8">
+                                                                        <Button
+                                                                            Click="BasicDeckSlotButton_Click"
+                                                                            CommandParameter="{Binding}"
+                                                                            Content="{Binding SlotActionText, Mode=OneWay}"
+                                                                            Style="{StaticResource PrimaryToolButtonStyle}" />
+                                                                        <Button
+                                                                            Click="ChangeBasicDeckSlotButton_Click"
+                                                                            CommandParameter="{Binding}"
+                                                                            Content="更改"
+                                                                            Style="{StaticResource PrimaryToolButtonStyle}"
+                                                                            Visibility="{Binding IsFilled, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -905,7 +1169,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid MaxWidth="1480" HorizontalAlignment="Stretch" ColumnSpacing="12">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="40" />
                             <ColumnDefinition Width="*" />
@@ -934,9 +1198,9 @@
                                     Symbol="Forward" />
                                 <Button
                                     Click="BackToBasicDeckSettingsButton_Click"
-                                    Content="基础卡堆设置"
+                                    Content="牌堆设置"
                                     Style="{StaticResource SecondaryBreadcrumbButtonStyle}"
-                                    ToolTipService.ToolTip="返回基础卡堆设置"
+                                    ToolTipService.ToolTip="返回牌堆设置"
                                     Visibility="{Binding HandCardDetail.ShowBasicDeckBreadcrumb, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
                                 <SymbolIcon
                                     VerticalAlignment="Center"
@@ -954,7 +1218,7 @@
                     <ScrollViewer
                         Grid.Row="1"
                         VerticalScrollBarVisibility="Auto">
-                        <Grid MaxWidth="1480" HorizontalAlignment="Stretch" RowSpacing="16">
+                        <Grid HorizontalAlignment="Stretch" RowSpacing="16">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -963,6 +1227,7 @@
 
                             <StackPanel Spacing="4">
                                 <TextBlock
+                                    Foreground="{Binding HandCardDetail.Suit, Converter={StaticResource HandCardSuitBrushConverter}, ConverterParameter=Text, Mode=OneWay}"
                                     Style="{StaticResource PageTitleStyle}"
                                     Text="{Binding HandCardDetail.Title, Mode=OneWay}" />
                                 <TextBlock
@@ -975,7 +1240,7 @@
                                 IsClosable="False"
                                 IsOpen="{Binding HandCardDetail.IsNoticeOpen, Mode=OneWay}"
                                 Message="{Binding HandCardDetail.NoticeMessage, Mode=OneWay}"
-                                Severity="Informational"
+                                Severity="Warning"
                                 Title="{Binding HandCardDetail.NoticeTitle, Mode=OneWay}" />
 
                             <Grid Grid.Row="2" ColumnSpacing="16">
@@ -1031,6 +1296,7 @@
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 
                                             <TextBlock Grid.ColumnSpan="2" Style="{StaticResource SectionTitleStyle}" Text="卡牌属性" />
@@ -1038,6 +1304,7 @@
                                                 Grid.Row="1"
                                                 Header="花色"
                                                 DisplayMemberPath="DisplayName"
+                                                IsEnabled="{Binding HandCardDetail.CanEditPokerIdentity, Mode=OneWay}"
                                                 ItemsSource="{Binding HandCardDetail.Suits, Mode=OneWay}"
                                                 SelectedValue="{Binding HandCardDetail.Suit, Mode=TwoWay}"
                                                 SelectedValuePath="Value"
@@ -1052,11 +1319,20 @@
                                                 Minimum="1"
                                                 SmallChange="1"
                                                 SpinButtonPlacementMode="Compact"
+                                                IsEnabled="{Binding HandCardDetail.CanEditPokerIdentity, Mode=OneWay}"
                                                 ValidationMode="InvalidInputOverwritten"
                                                 Value="{Binding HandCardDetail.PokerNumber, Mode=TwoWay}"
                                                 ValueChanged="HandCardDetailNumberBox_ValueChanged" />
-                                            <ComboBox
+                                            <InfoBar
                                                 Grid.Row="2"
+                                                Grid.ColumnSpan="2"
+                                                IsClosable="False"
+                                                IsOpen="{Binding HandCardDetail.IsBasicDeckLocked, Mode=OneWay}"
+                                                Message="{Binding HandCardDetail.BasicDeckLockMessage, Mode=OneWay}"
+                                                Severity="Warning"
+                                                Title="牌堆已锁定花色和数字" />
+                                            <ComboBox
+                                                Grid.Row="3"
                                                 Header="卡牌类型"
                                                 DisplayMemberPath="DisplayName"
                                                 ItemsSource="{Binding HandCardDetail.CardTypes, Mode=OneWay}"
@@ -1064,7 +1340,7 @@
                                                 SelectedValuePath="Value"
                                                 SelectionChanged="HandCardDetailComboBox_SelectionChanged" />
                                             <NumberBox
-                                                Grid.Row="2"
+                                                Grid.Row="3"
                                                 Grid.Column="1"
                                                 Header="剩余使用次数"
                                                 AcceptsExpression="False"
@@ -1075,17 +1351,17 @@
                                                 Value="{Binding HandCardDetail.RemainingUseCount, Mode=TwoWay}"
                                                 ValueChanged="HandCardDetailNumberBox_ValueChanged" />
                                             <ComboBox
-                                                Grid.Row="3"
-                                                Header="武器类型"
+                                                Grid.Row="4"
+                                                Header="装备类型"
                                                 DisplayMemberPath="DisplayName"
                                                 ItemsSource="{Binding HandCardDetail.EquipTypes, Mode=OneWay}"
                                                 SelectedValue="{Binding HandCardDetail.EquipType, Mode=TwoWay}"
                                                 SelectedValuePath="Value"
                                                 SelectionChanged="HandCardDetailComboBox_SelectionChanged" />
                                             <NumberBox
-                                                Grid.Row="3"
+                                                Grid.Row="4"
                                                 Grid.Column="1"
-                                                Header="数值（攻击距离/盾）"
+                                                Header="数值（攻击范围/固定减伤）"
                                                 AcceptsExpression="False"
                                                 LargeChange="1"
                                                 SmallChange="1"
@@ -1142,7 +1418,7 @@
 
                                         <Border Grid.Column="1" Style="{StaticResource PanelBorderStyle}">
                                             <StackPanel Padding="16" Spacing="12">
-                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="数值表达式" />
+                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="共鸣牌表达式" />
                                                 <TextBox
                                                     Header="共鸣牌表达式"
                                                     AcceptsReturn="True"
@@ -1151,7 +1427,7 @@
                                                     Text="{Binding HandCardDetail.Expression, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                     TextChanged="HandCardDetailTextBox_TextChanged"
                                                     TextWrapping="Wrap" />
-                                                <TextBlock Style="{StaticResource SubtleTextStyle}" Text="表达式先按文本落盘，后续可在同步阶段补充语法校验。" />
+                                                <TextBlock Style="{StaticResource SubtleTextStyle}" Text="共鸣牌表达式用于下注公式，和装备数值没有优先级关系；后续可在同步阶段补充语法校验。" />
                                             </StackPanel>
                                         </Border>
                                     </Grid>
@@ -1196,7 +1472,7 @@
                                         <StackPanel Padding="16" Spacing="8">
                                             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="保存状态" />
                                             <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding HandCardDetail.SaveStatusText, Mode=OneWay}" />
-                                            <TextBlock Style="{StaticResource SubtleTextStyle}" Text="字段对应 FantasyProject 的 FCardStruct：Name、Background/CardFace、Description、Poker、Number、Type、FunctionGroup、CanUseTimes、EquipType、EXValue、Expression。" />
+                                            <TextBlock Style="{StaticResource SubtleTextStyle}" Text="字段对应 FantasyProject 的 FCardStruct：Name、Background/CardFace、Description、Poker、Number、Type、FunctionGroup、CanUseTimes、EquipType、EXValue、Expression；EXValue 中武器表示攻击范围，防具表示固定减伤。" />
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
@@ -1209,7 +1485,7 @@
                     x:Name="UnrealSyncPage"
                     Visibility="Collapsed"
                     VerticalScrollBarVisibility="Auto">
-                    <Grid MaxWidth="1480" HorizontalAlignment="Center" RowSpacing="16">
+                    <Grid HorizontalAlignment="Stretch" RowSpacing="16">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -1227,7 +1503,7 @@
                             IsClosable="False"
                             IsOpen="True"
                             Message="同步前请先确认 Unreal Engine 路径和 Unreal 项目路径。后续执行同步时必须先备份或明确选择直接同步。"
-                            Severity="Informational"
+                            Severity="Warning"
                             Title="等待同步定位" />
 
                         <Border Grid.Row="2" Style="{StaticResource PanelBorderStyle}">
@@ -1296,7 +1572,7 @@
                     HorizontalScrollBarVisibility="Disabled"
                     Visibility="Collapsed"
                     VerticalScrollBarVisibility="Auto">
-                    <Grid MaxWidth="1480" HorizontalAlignment="Center" ColumnSpacing="16" RowSpacing="16">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="16" RowSpacing="16">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
@@ -1386,6 +1662,25 @@
 
                             <Expander>
                                 <Expander.Header>
+                                    <TextBlock FontWeight="SemiBold" Text="视觉显示" />
+                                </Expander.Header>
+                                <StackPanel Padding="16,8,16,16" Spacing="10">
+                                    <Grid MinHeight="44" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="手牌按花色显示底色" />
+                                            <TextBlock Style="{StaticResource SubtleTextStyle}" Text="红桃红色、方片橙色、梅花青色、黑桃蓝色；默认开启。" />
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" IsOn="{Binding Settings.UseSuitColoredHandCards, Mode=TwoWay}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander>
+                                <Expander.Header>
                                     <TextBlock FontWeight="SemiBold" Text="Log 输出" />
                                 </Expander.Header>
                                 <StackPanel Padding="16,8,16,16" Spacing="10">
@@ -1449,6 +1744,25 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="更新源" />
+                                            <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding Settings.UpdateSourceText, Mode=OneWay}" />
+                                        </StackPanel>
+                                        <ComboBox
+                                            x:Name="UpdateSourceComboBox"
+                                            Grid.Column="1"
+                                            MinWidth="168"
+                                            SelectionChanged="UpdateSourceComboBox_SelectionChanged"
+                                            VerticalAlignment="Center">
+                                            <ComboBoxItem Content="GitHub" />
+                                            <ComboBoxItem Content="Gitee" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Grid MinHeight="44" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2" VerticalAlignment="Center">
                                             <TextBlock Text="更新通道" />
                                             <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding Settings.UpdateChannelText, Mode=OneWay}" />
                                         </StackPanel>
@@ -1458,7 +1772,7 @@
                                             MinWidth="168"
                                             SelectionChanged="UpdateChannelComboBox_SelectionChanged"
                                             VerticalAlignment="Center">
-                                            <ComboBoxItem Content="稳定版" />
+                                            <ComboBoxItem Content="正式版" />
                                             <ComboBoxItem Content="测试版" />
                                         </ComboBox>
                                     </Grid>
@@ -1502,9 +1816,130 @@
                                     <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding Settings.UpdateLastStatus, Mode=OneWay}" />
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Button Click="CheckUpdateButton_Click" Content="检查更新" Style="{StaticResource PrimaryToolButtonStyle}" />
-                                        <Button Click="TestUpdateConnectionButton_Click" Content="测试 GitHub 连接" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                        <Button Click="TestUpdateConnectionButton_Click" Content="测试更新源连接" Style="{StaticResource PrimaryToolButtonStyle}" />
                                         <Button Click="OpenReleasePageButton_Click" Content="打开 Release 页面" Style="{StaticResource PrimaryToolButtonStyle}" />
                                     </StackPanel>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander
+                                IsExpanded="True"
+                                Visibility="{Binding DeveloperRelease.IsVisible, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
+                                <Expander.Header>
+                                    <TextBlock FontWeight="SemiBold" Text="开发者发布中心" />
+                                </Expander.Header>
+                                <StackPanel Padding="16,8,16,16" Spacing="12">
+                                    <InfoBar
+                                        IsClosable="False"
+                                        IsOpen="True"
+                                        Message="{Binding DeveloperRelease.ConfigurationMessage, Mode=OneWay}"
+                                        Severity="{Binding DeveloperRelease.ConfigurationSeverity, Mode=OneWay}"
+                                        Title="{Binding DeveloperRelease.ConfigurationTitle, Mode=OneWay}" />
+                                    <TextBox
+                                        Header="开发者工程目录"
+                                        IsReadOnly="True"
+                                        Text="{Binding DeveloperRelease.ProjectRoot, Mode=OneWay}" />
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox
+                                            Header="目标版本号"
+                                            PlaceholderText="必须高于当前版本"
+                                            Text="{Binding DeveloperRelease.TargetVersion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Button
+                                            Grid.Column="1"
+                                            Margin="0,28,0,0"
+                                            Click="SuggestBetaVersionButton_Click"
+                                            Content="测试版建议"
+                                            Style="{StaticResource PrimaryToolButtonStyle}" />
+                                        <Button
+                                            Grid.Column="2"
+                                            Margin="0,28,0,0"
+                                            Click="SuggestStableVersionButton_Click"
+                                            Content="正式版建议"
+                                            Style="{StaticResource PrimaryToolButtonStyle}" />
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource SubtleTextStyle}" Text="{Binding DeveloperRelease.CurrentVersionText, Mode=OneWay}" />
+                                    <Grid ColumnSpacing="8" RowSpacing="8">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            Click="PackStableDeveloperButton_Click"
+                                            IsEnabled="{Binding DeveloperRelease.CanRun, Mode=OneWay}"
+                                            Style="{StaticResource PrimaryToolButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <SymbolIcon Symbol="Save" />
+                                                <TextBlock Text="打包正式版" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button
+                                            Grid.Column="1"
+                                            Click="PackBetaDeveloperButton_Click"
+                                            IsEnabled="{Binding DeveloperRelease.CanRun, Mode=OneWay}"
+                                            Style="{StaticResource PrimaryToolButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <SymbolIcon Symbol="Save" />
+                                                <TextBlock Text="打包测试版" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button
+                                            Grid.Column="2"
+                                            Click="PublishLatestDeveloperButton_Click"
+                                            IsEnabled="{Binding DeveloperRelease.CanRun, Mode=OneWay}"
+                                            Style="{StaticResource PrimaryToolButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <SymbolIcon Symbol="Upload" />
+                                                <TextBlock Text="发布最新包" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Row="1" Click="OpenDeveloperOutputRootButton_Click" Content="打开打包目录" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                        <Button Grid.Row="1" Grid.Column="1" Click="OpenDeveloperReleaseAssetsButton_Click" Content="打开发布资产" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                        <Button Grid.Row="1" Grid.Column="2" Click="RefreshDeveloperReleaseButton_Click" Content="刷新配置" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="配置集" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Click="ConfigureDeveloperGitHubButton_Click" Content="GitHub 登录" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                        <Button Click="SetDeveloperGiteeTokenButton_Click" Content="设置 Gitee Token" Style="{StaticResource PrimaryToolButtonStyle}" />
+                                    </StackPanel>
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <ProgressRing
+                                            Width="20"
+                                            Height="20"
+                                            IsActive="{Binding DeveloperRelease.IsBusy, Mode=OneWay}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource SubtleTextStyle}"
+                                            Text="{Binding DeveloperRelease.OperationStatus, Mode=OneWay}"
+                                            TextWrapping="Wrap" />
+                                    </Grid>
+                                    <ListView
+                                        MaxHeight="240"
+                                        ItemsSource="{Binding DeveloperRelease.OutputLines, Mode=OneWay}">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock
+                                                    FontFamily="Cascadia Mono"
+                                                    FontSize="12"
+                                                    Text="{Binding}"
+                                                    TextWrapping="Wrap" />
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
                                 </StackPanel>
                             </Expander>
 
@@ -1525,7 +1960,7 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="关于" Style="{StaticResource SectionTitleStyle}" FontSize="20" />
                                     <TextBlock Text="幻杀工具箱" FontWeight="SemiBold" FontSize="18" TextWrapping="Wrap" />
-                                    <TextBlock Text="版本 1.0.0" Style="{StaticResource SubtleTextStyle}" />
+                                    <TextBlock Text="{Binding AboutVersionText, Mode=OneWay}" Style="{StaticResource SubtleTextStyle}" />
                                 </StackPanel>
                                 <TextBlock Text="面向卡牌和三国杀类武将制作的工具箱，用于组织角色、手牌和 FantasyProject 虚幻同步流程。" Style="{StaticResource SubtleTextStyle}" />
                                 <StackPanel Spacing="8">

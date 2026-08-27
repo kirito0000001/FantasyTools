@@ -22,12 +22,14 @@ internal sealed class SettingsViewModel : ObservableObject
     private ThemePreference _themePreference = ThemePreference.Light;
     private bool _showWorkspacePath;
     private bool _showCurrentModule;
+    private bool _useSuitColoredHandCards = true;
     private bool _logEnabled;
     private bool _logSaveToFileEnabled;
     private bool _logUserOperations = true;
     private bool _logWarnings = true;
     private bool _logErrors = true;
     private UpdateChannel _updateChannel = UpdateChannel.Stable;
+    private UpdateSource _updateSource = UpdateSource.GitHub;
     private bool _updateAutoCheckEnabled = true;
     private bool _updateCheckOnStartup = true;
     private double _updateConnectionTimeoutSeconds = 120;
@@ -88,6 +90,12 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetSettingProperty(ref _showCurrentModule, value, nameof(ShowCurrentModule), () => _settings.ShowCurrentModule = value);
     }
 
+    public bool UseSuitColoredHandCards
+    {
+        get => _useSuitColoredHandCards;
+        set => SetSettingProperty(ref _useSuitColoredHandCards, value, nameof(UseSuitColoredHandCards), () => _settings.UseSuitColoredHandCards = value);
+    }
+
     public bool LogEnabled
     {
         get => _logEnabled;
@@ -126,7 +134,34 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetSettingProperty(ref _updateChannel, value, nameof(UpdateChannel), () => _settings.UpdateChannel = value, nameof(UpdateChannelText));
     }
 
-    public string UpdateChannelText => UpdateChannel == UpdateChannel.Beta ? "测试版 / prerelease" : "稳定版 / Release";
+    public string UpdateChannelText => UpdateChannel == UpdateChannel.Beta ? "测试版 / prerelease" : "正式版 / Release";
+
+    public UpdateSource UpdateSource
+    {
+        get => _updateSource;
+        set => SetSettingProperty(
+            ref _updateSource,
+            value,
+            nameof(UpdateSource),
+            () =>
+            {
+                _settings.UpdateSource = value;
+                _settings.UpdateReleaseApiUrl = UpdateService.GetReleaseApiUrl(value);
+                _settings.UpdateReleasePageUrl = UpdateService.GetReleasePageUrl(value);
+            },
+            nameof(UpdateSourceText),
+            nameof(UpdateSourceDisplayName),
+            nameof(UpdateReleaseApiUrl),
+            nameof(UpdateReleasePageUrl));
+    }
+
+    public string UpdateSourceText => UpdateSource switch
+    {
+        UpdateSource.Gitee => "Gitee / 国内镜像源",
+        _ => "GitHub / 默认发布源"
+    };
+
+    public string UpdateSourceDisplayName => UpdateService.GetUpdateSourceDisplayName(UpdateSource);
 
     public bool UpdateAutoCheckEnabled
     {
@@ -159,9 +194,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string UpdateConnectionTimeoutText => $"最长连接时间：{UpdateConnectionTimeoutSecondsValue} 秒";
 
-    public string UpdateReleaseApiUrl => _settings.UpdateReleaseApiUrl;
+    public string UpdateReleaseApiUrl => UpdateService.GetReleaseApiUrl(UpdateSource);
 
-    public string UpdateReleasePageUrl => _settings.UpdateReleasePageUrl;
+    public string UpdateReleasePageUrl => UpdateService.GetReleasePageUrl(UpdateSource);
 
     public string UpdateLastCheckText => _settings.UpdateLastCheckAt is null
         ? "最近检查：从未检查"
@@ -228,17 +263,27 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings = _settingsService.Load();
         ProjectRootPath = _settingsService.ResolveProjectRootPath(_settings);
 
+        var restoredLegacyUpdateSource = !Enum.IsDefined(_settings.UpdateSource);
+        if (restoredLegacyUpdateSource)
+        {
+            _settings.UpdateSource = UpdateSource.GitHub;
+            _settings.UpdateReleaseApiUrl = UpdateService.GetReleaseApiUrl(UpdateSource.GitHub);
+            _settings.UpdateReleasePageUrl = UpdateService.GetReleasePageUrl(UpdateSource.GitHub);
+        }
+
         _isLoadingSettings = true;
         try
         {
             ThemePreference = _settings.ThemePreference;
             ShowWorkspacePath = _settings.ShowWorkspacePath;
             ShowCurrentModule = _settings.ShowCurrentModule;
+            UseSuitColoredHandCards = _settings.UseSuitColoredHandCards;
             LogEnabled = _settings.LogEnabled;
             LogSaveToFileEnabled = _settings.LogSaveToFileEnabled;
             LogUserOperations = _settings.LogUserOperations;
             LogWarnings = _settings.LogWarnings;
             LogErrors = _settings.LogErrors;
+            UpdateSource = _settings.UpdateSource;
             UpdateChannel = _settings.UpdateChannel;
             UpdateAutoCheckEnabled = _settings.UpdateAutoCheckEnabled;
             UpdateCheckOnStartup = _settings.UpdateCheckOnStartup;
@@ -247,6 +292,12 @@ internal sealed class SettingsViewModel : ObservableObject
         finally
         {
             _isLoadingSettings = false;
+        }
+
+        if (restoredLegacyUpdateSource)
+        {
+            Save();
+            AppendLog(LogVerbosity.Warning, "已将已移除的旧更新源设置回退为 GitHub。");
         }
 
         EnsureCurrentProjectRoot();
@@ -320,12 +371,14 @@ internal sealed class SettingsViewModel : ObservableObject
         ThemePreference = ThemePreference.Light;
         ShowWorkspacePath = false;
         ShowCurrentModule = false;
+        UseSuitColoredHandCards = true;
         LogEnabled = false;
         LogSaveToFileEnabled = false;
         LogUserOperations = true;
         LogWarnings = true;
         LogErrors = true;
         UpdateChannel = UpdateChannel.Stable;
+        UpdateSource = UpdateSource.GitHub;
         UpdateAutoCheckEnabled = true;
         UpdateCheckOnStartup = true;
         UpdateConnectionTimeoutSeconds = 120;
@@ -344,9 +397,16 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public void SetProjectRootStatus(InfoBarSeverity severity, string title, string message)
     {
-        ProjectRootStatusSeverity = severity;
+        ProjectRootStatusSeverity = NormalizeNoticeSeverity(severity);
         ProjectRootStatusTitle = title;
         ProjectRootStatusMessage = message;
+    }
+
+    private static InfoBarSeverity NormalizeNoticeSeverity(InfoBarSeverity severity)
+    {
+        return severity == InfoBarSeverity.Informational
+            ? InfoBarSeverity.Warning
+            : severity;
     }
 
     public void SetUpdateStatus(string message)
@@ -358,7 +418,7 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(UpdateLastStatus));
     }
 
-    private bool SetSettingProperty<T>(ref T field, T value, string propertyName, System.Action updateSettings, string? dependentPropertyName = null)
+    private bool SetSettingProperty<T>(ref T field, T value, string propertyName, System.Action updateSettings, params string[] dependentPropertyNames)
     {
         if (!SetProperty(ref field, value, propertyName))
         {
@@ -371,7 +431,7 @@ internal sealed class SettingsViewModel : ObservableObject
             Save();
         }
 
-        if (dependentPropertyName is not null)
+        foreach (var dependentPropertyName in dependentPropertyNames)
         {
             OnPropertyChanged(dependentPropertyName);
         }

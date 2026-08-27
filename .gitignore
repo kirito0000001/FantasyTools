@@ -2,27 +2,58 @@
 bin/
 obj/
 AppPackages/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+arm64/
+Generated Files/
 
 # Visual Studio / Rider local state
 .vs/
 .idea/
+.vscode/
+_ReSharper*/
+*.DotSettings.user
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
 
-# Windows and editor noise
+# Test, coverage and package caches
+TestResults/
+coverage/
+.coverage
+*.coverage
+*.coveragexml
+.cache/
+.nuget/
+packages/
+*.nupkg
+*.snupkg
+
+# Windows, editor and temporary noise
 Thumbs.db
 Desktop.ini
+.DS_Store
 *.tmp
 *.log
 *.bak
+*.orig
+*.rej
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
+*.pch
 __pycache__/
 *.pyc
 
 # Local publish artifacts
 publish/
 artifacts/
+out/
+ReleaseAssets/
 
 # Package and publish artifacts
 *.appx
@@ -30,3 +61,6 @@ artifacts/
 *.msix
 *.msixbundle
 *.cer
+*.pfx
+*.p12
+*.key

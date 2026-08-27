@@ -164,7 +164,7 @@ internal sealed class CharacterDetailViewModel : ObservableObject
             ReplaceSkills(character.Meta.Skills);
             ReplaceEntries(CarryCards, character.Meta.CarryCards);
             NoticeTitle = "角色资料已打开";
-            NoticeMessage = "修改会自动保存；技能英文代号按角色英文代号和顺序自动生成。";
+            NoticeMessage = "修改会自动保存；Stage 对应 UE 角色形态阶段，技能英文代号按角色英文代号和顺序自动生成。";
             IsNoticeOpen = true;
             _isDirty = false;
             SaveStatusText = "修改会自动保存。";

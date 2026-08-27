@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
 
@@ -7,7 +7,12 @@ param(
 
     [string]$OutputRoot = "D:\DabaoV",
 
+    [string]$ReleaseAssetRoot = "",
+
     [string]$Version = "",
+
+    [ValidateSet("stable", "beta")]
+    [string]$Channel = "stable",
 
     [switch]$Clean,
 
@@ -117,6 +122,32 @@ function Get-AssemblyCompatibleVersion {
 
     $parts = ConvertTo-VersionParts -VersionText $VersionText
     return "{0}.{1}.{2}.{3}" -f $parts.Major, $parts.Minor, $parts.Patch, $parts.Build
+}
+
+function Resolve-ChannelVersion {
+    param(
+        [string]$VersionText,
+        [string]$PackageChannel
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VersionText)) {
+        if ($PackageChannel -eq "beta") {
+            throw "打包测试版必须填写版本号。可以只写 1.0.2，脚本会自动生成 1.0.2-Beta。"
+        }
+
+        return ""
+    }
+
+    $trimmed = $VersionText.Trim().TrimStart('v', 'V')
+    if ($PackageChannel -eq "beta" -and !$trimmed.Contains("-")) {
+        return "$trimmed-Beta"
+    }
+
+    if ($PackageChannel -eq "stable" -and $trimmed.Contains("-")) {
+        throw "打包正式版不能使用预发布版本号：$trimmed。请使用 1.0.2 这种格式。"
+    }
+
+    return $trimmed
 }
 
 function Set-ProjectVersion {
@@ -232,6 +263,17 @@ function New-AppShortcut {
     $shortcut.Save()
 }
 
+function Convert-FileToUtf8Bom {
+    param([string]$Path)
+
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "File was not found: $Path"
+    }
+
+    $content = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false, $true))
+    [System.IO.File]::WriteAllText($Path, $content, [System.Text.UTF8Encoding]::new($true))
+}
+
 function Assert-RequiredPackagePaths {
     param(
         [string]$ProgramDir,
@@ -279,29 +321,69 @@ function New-UpdatePackageManifest {
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 }
 
+function Compress-ReleasePackage {
+    param(
+        [string]$ProgramDir,
+        [string]$ZipPath
+    )
+
+    $bandizip = Get-Command bz.exe -ErrorAction SilentlyContinue
+    if ($null -eq $bandizip) {
+        $installedPath = "C:\Program Files\Bandizip\bz.exe"
+        if (Test-Path -LiteralPath $installedPath) {
+            $bandizip = Get-Item -LiteralPath $installedPath
+        }
+    }
+
+    if ($null -ne $bandizip) {
+        $bandizipPath = if ($bandizip.Source) { $bandizip.Source } else { $bandizip.FullName }
+        Write-Host "正在使用 Bandizip 最高压缩生成 Release ZIP..."
+        & $bandizipPath c -fmt:zip -l:9 -r -y $ZipPath $ProgramDir | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Bandizip 压缩失败，exit code $LASTEXITCODE"
+        }
+        return
+    }
+
+    Write-Host "未找到 Bandizip，回退到 Compress-Archive。" -ForegroundColor Yellow
+    Compress-Archive -LiteralPath $ProgramDir -DestinationPath $ZipPath -Force
+}
+
 function New-ReleaseAssets {
     param(
         [string]$PackageRoot,
         [string]$ProgramDir,
-        [string]$OutputRoot,
+        [string]$ReleaseAssetRoot,
         [string]$AppDisplayName,
         [string]$Version,
-        [string]$Runtime
+        [string]$Runtime,
+        [string]$Channel,
+        [string]$ReleaseNotes
     )
 
-    $releaseAssetRoot = Join-Path $OutputRoot "ReleaseAssets"
-    New-Item -ItemType Directory -Force -Path $releaseAssetRoot | Out-Null
+    if ([string]::IsNullOrWhiteSpace($ReleaseAssetRoot)) {
+        throw "ReleaseAssetRoot cannot be empty."
+    }
+
+    New-Item -ItemType Directory -Force -Path $ReleaseAssetRoot | Out-Null
+    Get-ChildItem -LiteralPath $ReleaseAssetRoot -File -Force |
+        Where-Object {
+            $_.Name -eq "toolbox-update.json" -or
+            $_.Name -like "FantasyTools-v*.zip" -or
+            $_.Name -like "FantasyTools-v*.sha256.txt"
+        } |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 
     $zipName = "FantasyTools-v$Version-$Runtime.zip"
-    $zipPath = Join-Path $releaseAssetRoot $zipName
-    $shaPath = Join-Path $releaseAssetRoot "FantasyTools-v$Version-$Runtime.sha256.txt"
-    $manifestPath = Join-Path $releaseAssetRoot "toolbox-update.json"
+    $zipPath = Join-Path $ReleaseAssetRoot $zipName
+    $shaPath = Join-Path $ReleaseAssetRoot "FantasyTools-v$Version-$Runtime.sha256.txt"
+    $manifestPath = Join-Path $ReleaseAssetRoot "toolbox-update.json"
 
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
     }
 
-    Compress-Archive -LiteralPath $ProgramDir -DestinationPath $zipPath -Force
+    Compress-ReleasePackage -ProgramDir $ProgramDir -ZipPath $zipPath
     $sha = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
     "$sha  $zipName" | Set-Content -LiteralPath $shaPath -Encoding ASCII
     $zipSize = (Get-Item -LiteralPath $zipPath).Length
@@ -311,10 +393,11 @@ function New-ReleaseAssets {
         toolboxStableKey        = "FantasyTools"
         displayName             = $AppDisplayName
         version                 = $Version
-        channel                 = "stable"
+        channel                 = $Channel
         publishedAt             = (Get-Date).ToString("o")
         minSupportedVersion     = "1.0.0"
         releaseNotesUrl         = "https://github.com/kirito0000001/FantasyTools/releases/tag/v$Version"
+        releaseNotes            = $ReleaseNotes
         requiresManualMigration = $false
         requiresRestart         = $true
         assets                  = @(
@@ -346,8 +429,20 @@ $projectPath = Join-Path $repoRoot "FantasyTools.csproj"
 if (!(Test-Path -LiteralPath $projectPath)) {
     throw "Project file not found: $projectPath"
 }
+if ([string]::IsNullOrWhiteSpace($ReleaseAssetRoot)) {
+    $ReleaseAssetRoot = Join-Path $repoRoot "ReleaseAssets"
+}
+
+$releaseNotesPath = Join-Path $scriptsRoot "新版本介绍.txt"
+$releaseNotes = if (Test-Path -LiteralPath $releaseNotesPath) {
+    (Get-Content -LiteralPath $releaseNotesPath -Raw -Encoding UTF8).Trim()
+}
+else {
+    ""
+}
 
 [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
+$Version = Resolve-ChannelVersion -VersionText $Version -PackageChannel $Channel
 if (![string]::IsNullOrWhiteSpace($Version)) {
     Set-ProjectVersion -ProjectPath $projectPath -ProjectXml $projectXml -NewVersion $Version.Trim()
     [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
@@ -366,7 +461,7 @@ $workProjectPath = Join-Path $workSourceRoot "FantasyTools.csproj"
 $workBuildOutputDir = Join-Path $workSourceRoot (Join-Path "bin" (Join-Path $platform (Join-Path $Configuration (Join-Path $targetFramework $Runtime))))
 $packageRoot = Join-Path $OutputRoot $packageBaseName
 $programDir = $packageRoot
-$shortcutPath = Join-Path $packageRoot "$appDisplayName.lnk"
+$shortcutPath = Join-Path $OutputRoot "$appDisplayName.lnk"
 
 if ($Clean) {
     Remove-DirectoryIfExists -Path (Join-Path $repoRoot "bin")
@@ -424,7 +519,12 @@ Copy-WinUiCompiledResources `
 
 $appExe = Join-Path $programDir $appExeName
 New-UpdatePackageManifest -ProgramDir $programDir -Version $appVersion -Runtime $Runtime -EntryExe $appExeName
+$updaterScriptPath = Join-Path $programDir "Scripts\热更新覆盖.ps1"
+Convert-FileToUtf8Bom -Path $updaterScriptPath
 Assert-RequiredPackagePaths -ProgramDir $programDir -AssemblyName $assemblyName
+if (Test-Path -LiteralPath $shortcutPath) {
+    Remove-Item -LiteralPath $shortcutPath -Force
+}
 New-AppShortcut `
     -ShortcutPath $shortcutPath `
     -TargetPath $appExe `
@@ -435,10 +535,12 @@ Write-Host "==> Building release assets"
 $releaseAssets = New-ReleaseAssets `
     -PackageRoot $packageRoot `
     -ProgramDir $programDir `
-    -OutputRoot $OutputRoot `
+    -ReleaseAssetRoot $ReleaseAssetRoot `
     -AppDisplayName $appDisplayName `
     -Version $appVersion `
-    -Runtime $Runtime
+    -Runtime $Runtime `
+    -Channel $Channel `
+    -ReleaseNotes $releaseNotes
 
 if (!$KeepWorkFolder) {
     Remove-DirectoryIfExists -Path $workRoot
@@ -447,8 +549,9 @@ if (!$KeepWorkFolder) {
 Write-Host ""
 Write-Host "Package folder: $packageRoot"
 Write-Host "Version:        $appVersion"
+Write-Host "Channel:        $Channel"
 Write-Host "Runtime:        $Runtime"
-Write-Host "Shortcut:       $appDisplayName.lnk"
+Write-Host "Shortcut:       $shortcutPath"
 Write-Host "Release zip:    $($releaseAssets.ZipPath)"
 Write-Host "Release sha256: $($releaseAssets.ShaPath)"
 Write-Host "Release json:   $($releaseAssets.ManifestPath)"
